@@ -1,5 +1,8 @@
 # StrataFx
 
+[![CI](https://github.com/stratafx/StrataFx/actions/workflows/ci.yml/badge.svg)](https://github.com/stratafx/StrataFx/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **StrataFx** is an open-source, model-driven application framework for .NET.
 You write plain C# entity classes; StrataFx generates the list views, detail forms, lookups,
 navigation, validation and permission checks for them, and lets you customize everything in layers.
