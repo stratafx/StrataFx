@@ -41,3 +41,29 @@
 .strata-theme-item .strata-theme-name {
     flex: 1;
 }
+
+/* Compact detail forms: ~32px dense inputs instead of MudBlazor's ~40px, and tight grid cells. */
+
+.strata-detail .mud-input.mud-input-outlined.mud-input-margin-dense input,
+.strata-detail .mud-input.mud-input-outlined.mud-input-margin-dense .mud-input-slot {
+    padding-top: 7px;
+    padding-bottom: 7px;
+}
+
+.strata-detail .mud-input-label-outlined.mud-input-label-margin-dense {
+    transform: translate(14px, 8px) scale(1);
+}
+
+.strata-detail .mud-shrink ~ label.mud-input-label-outlined.mud-input-label-margin-dense,
+.strata-detail .mud-input:focus-within ~ label.mud-input-label-outlined.mud-input-label-margin-dense {
+    transform: translate(14px, -6px) scale(0.75);
+}
+
+.strata-detail .mud-simple-table table * tr > td,
+.strata-detail .mud-simple-table table * tr > th {
+    padding: 3px 8px;
+}
+
+.strata-detail .mud-simple-table td .mud-input-control {
+    margin: 0;
+}

@@ -21,7 +21,8 @@ public abstract class PropertyEditorBase : ComponentBase
     protected bool IsReadOnly => ReadOnly || Property.ReadOnly;
     protected bool HasError => Error is not null;
     protected string? Label => Compact ? null : Property.Required && !IsReadOnly ? Property.Caption + " *" : Property.Caption;
-    protected MudBlazor.Margin EditorMargin => Compact ? MudBlazor.Margin.Dense : MudBlazor.Margin.Normal;
+    /// <summary>Editors are always dense; forms stay compact and grid cells line up with form fields.</summary>
+    protected MudBlazor.Margin EditorMargin => MudBlazor.Margin.Dense;
     protected string? HelperText => Compact ? null : Property.Description;
 
     protected object? Value => Property.GetValue(Instance);

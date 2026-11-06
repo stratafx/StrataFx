@@ -18,30 +18,30 @@ else if (_instance is null)
 }
 else
 {
-    <MudPaper Elevation="1" Class="pa-4">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4" Wrap="Wrap.Wrap">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackUrl" aria-label="Back" />
-            <MudText Typo="Typo.h5">@Title</MudText>
+    <MudPaper Elevation="1" Class="strata-detail pa-3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-2" Wrap="Wrap.Wrap">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackUrl" Size="Size.Small" aria-label="Back" />
+            <MudText Typo="Typo.h6" Class="ml-1">@Title</MudText>
             <MudSpacer />
             @if (!_isNew)
             {
-                <CommandBar Entity="Entity" Target="CommandTarget.Detail" Selection="@(new[] { _instance })" Executed="OnCommandExecutedAsync" />
+                <CommandBar Entity="Entity" Target="CommandTarget.Detail" Selection="@(new[] { _instance })" Executed="OnCommandExecutedAsync" Size="Size.Small" />
             }
             @if (!_isNew && _canDelete)
             {
-                <MudButton Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync" Disabled="_busy">Delete</MudButton>
+                <MudButton Color="Color.Error" Size="Size.Small" StartIcon="@Icons.Material.Outlined.Delete" OnClick="DeleteAsync" Disabled="_busy">Delete</MudButton>
             }
             @if (_canSave)
             {
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="() => SaveAsync(close: false)" Disabled="_busy">Save</MudButton>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="() => SaveAsync(close: false)" Disabled="_busy">Save</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save"
                            OnClick="() => SaveAsync(close: true)" Disabled="_busy">Save &amp; Close</MudButton>
             }
         </MudStack>
 
         @if (_generalErrors.Count > 0)
         {
-            <MudAlert Severity="Severity.Error" Class="mb-4">
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">
                 @foreach (var message in _generalErrors) { <div>@message</div> }
             </MudAlert>
         }
@@ -50,12 +50,12 @@ else
         {
             @if (group.Key is not null)
             {
-                <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2"><b>@group.Key</b></MudText>
+                <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1">@group.Key</MudText>
             }
-            <MudGrid Spacing="3">
+            <MudGrid Spacing="2">
                 @foreach (var property in group)
                 {
-                    <MudItem xs="12" md="@(property.EditorKind == EditorKind.MultilineText ? 12 : 6)">
+                    <MudItem xs="12" sm="@(Wide(property) ? 12 : 6)" lg="@(Wide(property) ? 12 : 4)">
                         <DynamicComponent Type="@Editors.Resolve(property)" Parameters="@EditorParameters(property)" />
                     </MudItem>
                 }
@@ -65,7 +65,7 @@ else
         @* Collections go last and full width: owned items as an editable grid, related records as a list. *@
         @foreach (var collection in _collections)
         {
-            <div class="mt-6">
+            <div class="mt-4">
                 <DynamicComponent Type="@Editors.Resolve(collection)" Parameters="@EditorParameters(collection)" />
             </div>
         }
@@ -85,6 +85,9 @@ else
 
     /// <summary>The record's key from the URL, or null to create a new record.</summary>
     [Parameter] public string? Key { get; set; }
+
+    /// <summary>Multiline text takes a full row; everything else fits three to a row on wide screens.</summary>
+    private static bool Wide(PropertyModel property) => property.EditorKind == EditorKind.MultilineText;
 
     private string Title => _isNew ? $"New {Entity.Caption}" : Entity.GetDisplayText(_instance) is { Length: > 0 } text ? text : Entity.Caption;
 

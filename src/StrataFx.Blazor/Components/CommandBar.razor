@@ -10,6 +10,7 @@
     var context = new CommandContext(Entity, Selection, Data, Services);
     <MudButton Variant="Variant.Text"
                Color="Color.Primary"
+               Size="@Size"
                StartIcon="@command.Icon"
                Disabled="@(_running || !command.CanExecute(context))"
                OnClick="@(() => RunAsync(command, context))">
@@ -23,6 +24,7 @@
 
     [Parameter, EditorRequired] public EntityModel Entity { get; set; } = null!;
     [Parameter, EditorRequired] public CommandTarget Target { get; set; }
+    [Parameter] public Size Size { get; set; } = Size.Medium;
     [Parameter] public IReadOnlyList<object> Selection { get; set; } = [];
     [Parameter] public EventCallback<CommandResult> Executed { get; set; }
 
