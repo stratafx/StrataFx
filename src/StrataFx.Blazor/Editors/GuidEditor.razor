@@ -1,0 +1,23 @@
+@inherits PropertyEditorBase
+
+<MudTextField T="string"
+              Label="@Label"
+              Value="@Value?.ToString()"
+              ValueChanged="OnChanged"
+              ReadOnly="@IsReadOnly"
+              Error="@(HasError || _invalid)"
+              ErrorText="@(_invalid ? "Enter a valid GUID." : Error)"
+              HelperText="@Property.Description"
+              Variant="Variant.Outlined" />
+
+@code {
+    private bool _invalid;
+
+    private async Task OnChanged(string? text)
+    {
+        _invalid = false;
+        if (string.IsNullOrWhiteSpace(text)) { await SetValueAsync(ConvertToPropertyType(null)); return; }
+        if (Guid.TryParse(text, out var guid)) await SetValueAsync(guid);
+        else _invalid = true;
+    }
+}

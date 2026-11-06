@@ -1,0 +1,162 @@
+@* Generated list view: a paged, sortable, searchable table for any entity in the application model. *@
+@inject IDataStore Data
+@inject IPermissionService Permissions
+@inject NavigationManager Navigation
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<MudTable @ref="_table"
+          T="object"
+          ServerData="LoadAsync"
+          MultiSelection="@_canDelete"
+          @bind-SelectedItems="_selected"
+          OnRowClick="@((TableRowClickEventArgs<object> e) => Open(e.Item))"
+          Hover="true"
+          Dense="true"
+          RowsPerPage="25"
+          Elevation="1"
+          RowStyle="cursor: pointer">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">@Entity.PluralCaption</MudText>
+        <MudSpacer />
+        <MudTextField T="string"
+                      Value="_search"
+                      ValueChanged="OnSearchAsync"
+                      DebounceInterval="300"
+                      Placeholder="Search"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Clearable="true"
+                      Class="mt-0 mr-4"
+                      Style="max-width: 280px" />
+        <CommandBar Entity="Entity" Target="CommandTarget.List" Selection="@_selected.ToList()" Executed="OnCommandExecutedAsync" />
+        @if (_canDelete && _selected.Count > 0)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteSelectedAsync">
+                Delete (@_selected.Count)
+            </MudButton>
+        }
+        @if (_canCreate)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       Href="@StrataRoutes.New(Entity)" Class="ml-2">
+                New
+            </MudButton>
+        }
+    </ToolBarContent>
+    <HeaderContent>
+        @foreach (var column in _columns)
+        {
+            <MudTh><MudTableSortLabel T="object" SortLabel="@column.Name">@column.Caption</MudTableSortLabel></MudTh>
+        }
+    </HeaderContent>
+    <RowTemplate>
+        @foreach (var column in _columns)
+        {
+            <MudTd DataLabel="@column.Caption" Style="@(IsNumeric(column) ? "text-align: right" : null)">
+                @if (column.EditorKind == EditorKind.Boolean)
+                {
+                    @if (column.GetValue(context) is true)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                    }
+                }
+                else
+                {
+                    @column.FormatValue(column.GetValue(context))
+                }
+            </MudTd>
+        }
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>@(string.IsNullOrEmpty(_search) ? $"No {Entity.PluralCaption.ToLowerInvariant()} yet." : "No matching records.")</MudText>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new[] { 10, 25, 50, 100 }" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    private MudTable<object>? _table;
+    private HashSet<object> _selected = [];
+    private List<PropertyModel> _columns = [];
+    private string? _search;
+    private bool _canCreate, _canDelete;
+
+    [Parameter, EditorRequired] public EntityModel Entity { get; set; } = null!;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _columns = Entity.ListColumns.ToList();
+        _canCreate = Permissions.IsAllowed(Entity.ClrType, EntityOperation.Create);
+        _canDelete = Permissions.IsAllowed(Entity.ClrType, EntityOperation.Delete);
+        _selected = [];
+        _search = null;
+        if (_table is not null) await _table.ReloadServerData(); // same component reused for another entity
+    }
+
+    private async Task<TableData<object>> LoadAsync(TableState state, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await Data.QueryAsync(Entity, new QueryRequest
+            {
+                Skip = state.Page * state.PageSize,
+                Take = state.PageSize,
+                Search = _search,
+                SortProperty = string.IsNullOrEmpty(state.SortLabel) || state.SortDirection == SortDirection.None ? null : state.SortLabel,
+                SortDescending = state.SortDirection == SortDirection.Descending,
+            }, cancellationToken);
+            return new TableData<object> { Items = result.Items, TotalItems = result.TotalCount };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+            return new TableData<object> { Items = [], TotalItems = 0 };
+        }
+    }
+
+    private async Task OnSearchAsync(string? text)
+    {
+        _search = text;
+        if (_table is not null) await _table.ReloadServerData();
+    }
+
+    private void Open(object? item)
+    {
+        if (item is not null) Navigation.NavigateTo(StrataRoutes.Detail(Entity, item));
+    }
+
+    private async Task DeleteSelectedAsync()
+    {
+        var count = _selected.Count;
+        var confirmed = await Dialogs.ShowMessageBoxAsync(
+            "Delete",
+            count == 1 ? $"Delete this {Entity.Caption.ToLowerInvariant()}?" : $"Delete {count} {Entity.PluralCaption.ToLowerInvariant()}?",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) return;
+
+        try
+        {
+            await Data.DeleteAsync(Entity, _selected.ToList());
+            Snackbar.Add(count == 1 ? "Deleted." : $"Deleted {count} records.", Severity.Success);
+            _selected = [];
+            if (_table is not null) await _table.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+        }
+    }
+
+    private async Task OnCommandExecutedAsync(CommandResult result)
+    {
+        if (result.RefreshView && _table is not null)
+        {
+            _selected = [];
+            await _table.ReloadServerData();
+        }
+    }
+
+    private static bool IsNumeric(PropertyModel p) => p.EditorKind is EditorKind.Integer or EditorKind.Decimal;
+}

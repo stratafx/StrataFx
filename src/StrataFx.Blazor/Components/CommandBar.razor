@@ -1,0 +1,55 @@
+@* Buttons for the custom StrataCommands that apply to an entity in a list or detail view. *@
+@inject IEnumerable<StrataCommand> AllCommands
+@inject IDataStore Data
+@inject IServiceProvider Services
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+@foreach (var command in _commands)
+{
+    var context = new CommandContext(Entity, Selection, Data, Services);
+    <MudButton Variant="Variant.Text"
+               Color="Color.Primary"
+               StartIcon="@command.Icon"
+               Disabled="@(_running || !command.CanExecute(context))"
+               OnClick="@(() => RunAsync(command, context))">
+        @command.Caption
+    </MudButton>
+}
+
+@code {
+    private List<StrataCommand> _commands = [];
+    private bool _running;
+
+    [Parameter, EditorRequired] public EntityModel Entity { get; set; } = null!;
+    [Parameter, EditorRequired] public CommandTarget Target { get; set; }
+    [Parameter] public IReadOnlyList<object> Selection { get; set; } = [];
+    [Parameter] public EventCallback<CommandResult> Executed { get; set; }
+
+    protected override void OnParametersSet() =>
+        _commands = AllCommands.Where(c => c.Target.HasFlag(Target) && c.AppliesTo(Entity)).ToList();
+
+    private async Task RunAsync(StrataCommand command, CommandContext context)
+    {
+        if (command.ConfirmationMessage is { } question &&
+            await Dialogs.ShowMessageBoxAsync(command.Caption, question, yesText: "Yes", cancelText: "Cancel") != true)
+            return;
+
+        _running = true;
+        try
+        {
+            var result = await command.ExecuteAsync(context);
+            if (result.Message is not null)
+                Snackbar.Add(result.Message, result.Success ? Severity.Success : Severity.Warning);
+            await Executed.InvokeAsync(result);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+}

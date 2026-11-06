@@ -1,0 +1,23 @@
+@inherits PropertyEditorBase
+
+<MudSelect T="string"
+           Label="@Label"
+           Value="@Value?.ToString()"
+           ValueChanged="OnChanged"
+           Clearable="@(Property.IsNullable && !IsReadOnly)"
+           ReadOnly="@IsReadOnly"
+           Error="@HasError"
+           ErrorText="@Error"
+           HelperText="@Property.Description"
+           Variant="Variant.Outlined"
+           AnchorOrigin="Origin.BottomCenter">
+    @foreach (var name in Enum.GetNames(Property.UnderlyingType))
+    {
+        <MudSelectItem Value="@name">@Humanizer.SplitWords(name)</MudSelectItem>
+    }
+</MudSelect>
+
+@code {
+    private Task OnChanged(string? name) =>
+        SetValueAsync(string.IsNullOrEmpty(name) ? ConvertToPropertyType(null) : Enum.Parse(Property.UnderlyingType, name));
+}

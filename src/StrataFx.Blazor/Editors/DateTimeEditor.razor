@@ -1,0 +1,39 @@
+@inherits PropertyEditorBase
+
+<MudStack Row="true" Spacing="2">
+    <MudDatePicker Label="@Label"
+                   Date="@Current?.Date"
+                   DateChanged="OnDateChanged"
+                   Clearable="@(Property.IsNullable && !IsReadOnly)"
+                   ReadOnly="@IsReadOnly"
+                   Error="@HasError"
+                   ErrorText="@Error"
+                   HelperText="@Property.Description"
+                   Variant="Variant.Outlined" />
+    <MudTimePicker Label="Time"
+                   Time="@Current?.TimeOfDay"
+                   TimeChanged="OnTimeChanged"
+                   ReadOnly="@(IsReadOnly || Current is null)"
+                   Variant="Variant.Outlined" />
+</MudStack>
+
+@code {
+    private DateTime? Current => Value switch
+    {
+        DateTime d => d,
+        DateTimeOffset d => d.LocalDateTime,
+        _ => null,
+    };
+
+    private Task OnDateChanged(DateTime? date) =>
+        Write(date is null ? null : date.Value.Date + (Current?.TimeOfDay ?? TimeSpan.Zero));
+
+    private Task OnTimeChanged(TimeSpan? time) =>
+        Current is null ? Task.CompletedTask : Write(Current.Value.Date + (time ?? TimeSpan.Zero));
+
+    private Task Write(DateTime? value)
+    {
+        if (value is null) return SetValueAsync(ConvertToPropertyType(null));
+        return SetValueAsync(Property.UnderlyingType == typeof(DateTimeOffset) ? new DateTimeOffset(value.Value) : value.Value);
+    }
+}

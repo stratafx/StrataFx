@@ -1,0 +1,22 @@
+// A JSON model layer, applied on top of the model built from the entity classes.
+// Change captions, visibility, order or navigation here without recompiling (restart the app to apply).
+{
+  "title": "StrataFx Sample",
+  "entities": {
+    "product": {
+      "navigationGroup": "Catalog"
+    },
+    "customer": {
+      "properties": {
+        "Phone": { "visibleInList": false },
+        "CreatedOn": { "visibleInList": false }
+      }
+    },
+    "order": {
+      "properties": {
+        "Quantity": { "caption": "Qty" },
+        "ShippedOn": { "visibleInList": false }
+      }
+    }
+  }
+}

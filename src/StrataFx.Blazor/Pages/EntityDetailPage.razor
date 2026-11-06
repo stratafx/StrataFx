@@ -1,0 +1,25 @@
+@page "/app/{EntityId}/new"
+@page "/app/{EntityId}/{Key}"
+@inject AppModel Model
+
+@if (_entity is null)
+{
+    <PageTitle>Not found</PageTitle>
+    <MudAlert Severity="Severity.Warning">There is no page called "@EntityId".</MudAlert>
+}
+else
+{
+    <PageTitle>@(Key is null ? "New " + _entity.Caption : _entity.Caption) · @Model.Title</PageTitle>
+    <EntityDetailView Entity="_entity" Key="@Key" />
+}
+
+@code {
+    private EntityModel? _entity;
+
+    [Parameter] public string EntityId { get; set; } = "";
+
+    /// <summary>Null on the /new route.</summary>
+    [Parameter] public string? Key { get; set; }
+
+    protected override void OnParametersSet() => _entity = Model.FindEntity(EntityId);
+}

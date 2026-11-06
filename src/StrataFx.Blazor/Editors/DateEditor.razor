@@ -1,0 +1,33 @@
+@inherits PropertyEditorBase
+
+<MudDatePicker Label="@Label"
+               Date="@DateValue"
+               DateChanged="OnChanged"
+               Clearable="@(Property.IsNullable && !IsReadOnly)"
+               ReadOnly="@IsReadOnly"
+               Error="@HasError"
+               ErrorText="@Error"
+               HelperText="@Property.Description"
+               Variant="Variant.Outlined" />
+
+@code {
+    private DateTime? DateValue => Value switch
+    {
+        DateTime d => d.Date,
+        DateOnly d => d.ToDateTime(TimeOnly.MinValue),
+        DateTimeOffset d => d.Date,
+        _ => null,
+    };
+
+    private Task OnChanged(DateTime? date)
+    {
+        if (date is null) return SetValueAsync(ConvertToPropertyType(null));
+        object value = Property.UnderlyingType switch
+        {
+            var t when t == typeof(DateOnly) => DateOnly.FromDateTime(date.Value),
+            var t when t == typeof(DateTimeOffset) => new DateTimeOffset(date.Value.Date),
+            _ => date.Value.Date,
+        };
+        return SetValueAsync(value);
+    }
+}

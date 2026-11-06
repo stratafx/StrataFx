@@ -1,0 +1,22 @@
+@inherits PropertyEditorBase
+@inject IDataStore Data
+
+<MudAutocomplete T="object"
+                 Label="@Label"
+                 Value="@Value"
+                 ValueChanged="@(v => SetValueAsync(v))"
+                 SearchFunc="SearchAsync"
+                 ToStringFunc="@(o => Property.ReferenceEntity!.GetDisplayText(o))"
+                 DebounceInterval="250"
+                 ResetValueOnEmptyText="true"
+                 Clearable="@(!IsReadOnly)"
+                 ReadOnly="@IsReadOnly"
+                 Error="@HasError"
+                 ErrorText="@Error"
+                 HelperText="@Property.Description"
+                 Variant="Variant.Outlined" />
+
+@code {
+    private async Task<IEnumerable<object>> SearchAsync(string? text, CancellationToken cancellationToken) =>
+        await Data.LookupAsync(Property.ReferenceEntity!, text, 20, cancellationToken);
+}

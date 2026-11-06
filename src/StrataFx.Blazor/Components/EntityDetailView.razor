@@ -1,0 +1,190 @@
+@* Generated detail view: a form for any entity, with editors picked from the PropertyEditorRegistry. *@
+@inject IDataStore Data
+@inject IPermissionService Permissions
+@inject EntityValidator Validator
+@inject PropertyEditorRegistry Editors
+@inject NavigationManager Navigation
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_instance is null)
+{
+    <MudAlert Severity="Severity.Warning">This @Entity.Caption.ToLowerInvariant() was not found. It may have been deleted.</MudAlert>
+    <MudButton Href="@StrataRoutes.List(Entity)" Class="mt-4" StartIcon="@Icons.Material.Filled.ArrowBack">Back to @Entity.PluralCaption</MudButton>
+}
+else
+{
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4" Wrap="Wrap.Wrap">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@StrataRoutes.List(Entity)" aria-label="Back" />
+            <MudText Typo="Typo.h5">@Title</MudText>
+            <MudSpacer />
+            @if (!_isNew)
+            {
+                <CommandBar Entity="Entity" Target="CommandTarget.Detail" Selection="@(new[] { _instance })" Executed="OnCommandExecutedAsync" />
+            }
+            @if (!_isNew && _canDelete)
+            {
+                <MudButton Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync" Disabled="_busy">Delete</MudButton>
+            }
+            @if (_canSave)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="() => SaveAsync(close: false)" Disabled="_busy">Save</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="() => SaveAsync(close: true)" Disabled="_busy">Save &amp; Close</MudButton>
+            }
+        </MudStack>
+
+        @if (_generalErrors.Count > 0)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">
+                @foreach (var message in _generalErrors) { <div>@message</div> }
+            </MudAlert>
+        }
+
+        @foreach (var group in _groups)
+        {
+            @if (group.Key is not null)
+            {
+                <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2"><b>@group.Key</b></MudText>
+            }
+            <MudGrid Spacing="3">
+                @foreach (var property in group)
+                {
+                    <MudItem xs="12" md="@(property.EditorKind == EditorKind.MultilineText ? 12 : 6)">
+                        <DynamicComponent Type="@Editors.Resolve(property)" Parameters="@EditorParameters(property)" />
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudPaper>
+}
+
+@code {
+    private object? _instance;
+    private bool _isNew, _loading = true, _busy, _canSave, _canDelete;
+    private List<IGrouping<string?, PropertyModel>> _groups = [];
+    private Dictionary<string, string> _errors = [];
+    private List<string> _generalErrors = [];
+
+    [Parameter, EditorRequired] public EntityModel Entity { get; set; } = null!;
+
+    /// <summary>The record's key from the URL, or null to create a new record.</summary>
+    [Parameter] public string? Key { get; set; }
+
+    private string Title => _isNew ? $"New {Entity.Caption}" : Entity.GetDisplayText(_instance) is { Length: > 0 } text ? text : Entity.Caption;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _isNew = Key is null;
+        _groups = Entity.DetailItems.GroupBy(p => p.Group).ToList();
+        _canSave = Permissions.IsAllowed(Entity.ClrType, _isNew ? EntityOperation.Create : EntityOperation.Update);
+        _canDelete = Permissions.IsAllowed(Entity.ClrType, EntityOperation.Delete);
+        _errors = [];
+        _generalErrors = [];
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _instance = _isNew ? Entity.CreateInstance() : await Data.FindAsync(Entity, Entity.ParseKey(Key!));
+        }
+        catch (FormatException)
+        {
+            _instance = null;
+        }
+        catch (Exception ex)
+        {
+            _instance = null;
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Dictionary<string, object?> EditorParameters(PropertyModel property) => new()
+    {
+        [nameof(PropertyEditorBase.Property)] = property,
+        [nameof(PropertyEditorBase.Instance)] = _instance,
+        [nameof(PropertyEditorBase.ReadOnly)] = !_canSave,
+        [nameof(PropertyEditorBase.Error)] = _errors.GetValueOrDefault(property.Name),
+        [nameof(PropertyEditorBase.Changed)] = EventCallback.Factory.Create<PropertyModel>(this, OnPropertyChanged),
+    };
+
+    private void OnPropertyChanged(PropertyModel property) => _errors.Remove(property.Name);
+
+    private async Task SaveAsync(bool close)
+    {
+        if (_instance is null) return;
+        if (!ShowErrors(Validator.Validate(Entity, _instance))) return;
+
+        _busy = true;
+        try
+        {
+            await Data.SaveAsync(Entity, _instance, _isNew);
+            Snackbar.Add($"{Entity.Caption} saved.", Severity.Success);
+            if (close) Navigation.NavigateTo(StrataRoutes.List(Entity));
+            else if (_isNew) Navigation.NavigateTo(StrataRoutes.Detail(Entity, _instance), replace: true);
+        }
+        catch (StrataValidationException ex)
+        {
+            ShowErrors(ex.Errors);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Shows errors next to their editors (or in a summary). Returns true when there are none.</summary>
+    private bool ShowErrors(IReadOnlyList<ValidationError> errors)
+    {
+        _errors = errors
+            .Where(e => e.PropertyName is not null && Entity.FindProperty(e.PropertyName)?.VisibleInDetail == true)
+            .GroupBy(e => e.PropertyName!)
+            .ToDictionary(g => g.Key, g => string.Join(" ", g.Select(e => e.Message)));
+        _generalErrors = errors.Where(e => e.PropertyName is null || !_errors.ContainsKey(e.PropertyName)).Select(e => e.Message).ToList();
+        return errors.Count == 0;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_instance is null) return;
+        var confirmed = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete this {Entity.Caption.ToLowerInvariant()}?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) return;
+
+        _busy = true;
+        try
+        {
+            await Data.DeleteAsync(Entity, [_instance]);
+            Snackbar.Add($"{Entity.Caption} deleted.", Severity.Success);
+            Navigation.NavigateTo(StrataRoutes.List(Entity));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task OnCommandExecutedAsync(CommandResult result)
+    {
+        if (result.RefreshView) await LoadAsync();
+    }
+}

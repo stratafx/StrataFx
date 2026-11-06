@@ -1,0 +1,12 @@
+@inherits PropertyEditorBase
+
+<MudCheckBox T="bool"
+             Label="@Property.Caption"
+             Value="@(Value as bool? ?? false)"
+             ValueChanged="@(v => SetValueAsync(v))"
+             ReadOnly="@IsReadOnly"
+             Color="Color.Primary" />
+@if (HasError)
+{
+    <MudText Typo="Typo.caption" Color="Color.Error">@Error</MudText>
+}

@@ -1,0 +1,12 @@
+@inherits PropertyEditorBase
+
+<MudNumericField T="long?"
+                 Label="@Label"
+                 Value="@(Value is null ? null : Convert.ToInt64(Value))"
+                 ValueChanged="@(v => SetValueAsync(ConvertToPropertyType(v)))"
+                 Clearable="@(Property.IsNullable && !IsReadOnly)"
+                 ReadOnly="@IsReadOnly"
+                 Error="@HasError"
+                 ErrorText="@Error"
+                 HelperText="@Property.Description"
+                 Variant="Variant.Outlined" />

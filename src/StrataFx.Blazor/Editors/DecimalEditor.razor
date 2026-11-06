@@ -1,0 +1,13 @@
+@inherits PropertyEditorBase
+
+<MudNumericField T="decimal?"
+                 Label="@Label"
+                 Value="@(Value is null ? null : Convert.ToDecimal(Value))"
+                 ValueChanged="@(v => SetValueAsync(ConvertToPropertyType(v)))"
+                 Format="@Property.DisplayFormat"
+                 Clearable="@(Property.IsNullable && !IsReadOnly)"
+                 ReadOnly="@IsReadOnly"
+                 Error="@HasError"
+                 ErrorText="@Error"
+                 HelperText="@Property.Description"
+                 Variant="Variant.Outlined" />

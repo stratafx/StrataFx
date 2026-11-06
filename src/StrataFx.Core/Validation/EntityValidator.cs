@@ -1,0 +1,57 @@
+using System.ComponentModel.DataAnnotations;
+using StrataFx.Model;
+
+namespace StrataFx.Validation;
+
+public sealed record ValidationError(string? PropertyName, string Message);
+
+public sealed class StrataValidationException(IReadOnlyList<ValidationError> errors)
+    : Exception("The record is not valid: " + string.Join(" ", errors.Select(e => e.Message)))
+{
+    public IReadOnlyList<ValidationError> Errors { get; } = errors;
+}
+
+/// <summary>Custom validation rules beyond data annotations. Register implementations in DI.</summary>
+public interface IEntityRule
+{
+    bool AppliesTo(EntityModel entity);
+    IEnumerable<ValidationError> Validate(EntityModel entity, object instance);
+}
+
+/// <summary>
+/// Validates an instance with data annotations, the model's Required flags (including non-nullable references)
+/// and any registered <see cref="IEntityRule"/>s. Runs in the UI for feedback and in the data store for enforcement.
+/// </summary>
+public sealed class EntityValidator(IEnumerable<IEntityRule> rules)
+{
+    public EntityValidator() : this([]) { }
+
+    public IReadOnlyList<ValidationError> Validate(EntityModel entity, object instance)
+    {
+        var results = new List<ValidationResult>();
+        Validator.TryValidateObject(instance, new ValidationContext(instance), results, validateAllProperties: true);
+
+        var errors = results
+            .SelectMany(r => r.MemberNames.DefaultIfEmpty(null!).Select(m => new ValidationError(m, r.ErrorMessage ?? "Invalid value.")))
+            .ToList();
+
+        foreach (var prop in entity.Properties.Where(p => p.Required && p.VisibleInDetail && !p.ReadOnly))
+        {
+            if (errors.Any(e => e.PropertyName == prop.Name)) continue;
+            var value = prop.GetValue(instance);
+            if (value is null || value is string s && string.IsNullOrWhiteSpace(s))
+                errors.Add(new ValidationError(prop.Name, $"{prop.Caption} is required."));
+        }
+
+        foreach (var rule in rules.Where(r => r.AppliesTo(entity)))
+            errors.AddRange(rule.Validate(entity, instance));
+
+        return errors;
+    }
+
+    public void ThrowIfInvalid(EntityModel entity, object instance)
+    {
+        var errors = Validate(entity, instance);
+        if (errors.Count > 0) throw new StrataValidationException(errors);
+    }
+}

@@ -1,0 +1,21 @@
+@page "/app/{EntityId}"
+@inject AppModel Model
+
+@if (_entity is null)
+{
+    <PageTitle>Not found</PageTitle>
+    <MudAlert Severity="Severity.Warning">There is no page called "@EntityId".</MudAlert>
+}
+else
+{
+    <PageTitle>@_entity.PluralCaption · @Model.Title</PageTitle>
+    <EntityListView Entity="_entity" />
+}
+
+@code {
+    private EntityModel? _entity;
+
+    [Parameter] public string EntityId { get; set; } = "";
+
+    protected override void OnParametersSet() => _entity = Model.FindEntity(EntityId);
+}

@@ -1,0 +1,15 @@
+@inherits PropertyEditorBase
+
+<MudTextField T="string"
+              Label="@Label"
+              Value="@(Value as string)"
+              ValueChanged="@(v => SetValueAsync(string.IsNullOrEmpty(v) && Property.IsNullable ? null : v ?? ""))"
+              Lines="@Math.Max(1, Property.Lines)"
+              Sizing="@(Property.Lines > 1 ? InputSizing.Auto : InputSizing.Fixed)"
+              MaxLength="@(Property.MaxLength ?? 524288)"
+              Counter="@(Property.MaxLength is > 0 && !IsReadOnly ? Property.MaxLength : null)"
+              ReadOnly="@IsReadOnly"
+              Error="@HasError"
+              ErrorText="@Error"
+              HelperText="@Property.Description"
+              Variant="Variant.Outlined" />
