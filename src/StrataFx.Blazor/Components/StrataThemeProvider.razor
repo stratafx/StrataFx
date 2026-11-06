@@ -1,0 +1,81 @@
+@* Use instead of <MudThemeProvider />: applies the user's StrataFx theme and color mode, and remembers them in the browser. *@
+@implements IAsyncDisposable
+@inject StrataThemeState State
+@inject IJSRuntime JS
+
+<MudThemeProvider @ref="_provider" Theme="@State.Current.Theme" IsDarkMode="@IsDarkMode" />
+
+@code {
+    private MudThemeProvider? _provider;
+    private IJSObjectReference? _storage;
+    private bool _systemDark;
+    private bool _restoring;
+
+    private bool IsDarkMode => State.ColorMode switch
+    {
+        StrataColorMode.Dark => true,
+        StrataColorMode.Light => false,
+        _ => _systemDark,
+    };
+
+    protected override void OnInitialized() => State.Changed += OnThemeChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            if (_provider is not null)
+            {
+                _systemDark = await _provider.GetSystemDarkModeAsync();
+                await _provider.WatchSystemDarkModeAsync(dark =>
+                {
+                    _systemDark = dark;
+                    return InvokeAsync(StateHasChanged);
+                });
+            }
+
+            _storage = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/StrataFx.Blazor/strata-theme.js");
+            var saved = await _storage.InvokeAsync<SavedTheme?>("load");
+            _restoring = true;
+            State.Restore(saved?.Theme, saved?.Mode);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit went away while starting up; nothing to restore.
+        }
+        finally
+        {
+            _restoring = false;
+        }
+        StateHasChanged();
+    }
+
+    private void OnThemeChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            StateHasChanged();
+            if (_restoring || _storage is null) return;
+            try
+            {
+                await _storage.InvokeVoidAsync("save", State.Current.Id, State.ColorMode.ToString());
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        State.Changed -= OnThemeChanged;
+        if (_storage is not null)
+        {
+            try { await _storage.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+
+    private sealed record SavedTheme(string? Theme, string? Mode);
+}

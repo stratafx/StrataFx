@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor.Services;
 using StrataFx.Blazor.Editors;
+using StrataFx.Blazor.Theming;
 using StrataFx.Model;
 
 namespace StrataFx.Blazor;
@@ -94,13 +95,23 @@ public static class StrataFxBlazorExtensions
     /// <summary>The assembly with StrataFx's routable pages. Pass it to the Router's AdditionalAssemblies and AddAdditionalAssemblies.</summary>
     public static Assembly PagesAssembly => typeof(StrataFxBlazorExtensions).Assembly;
 
-    /// <summary>Adds the MudBlazor-based StrataFx UI.</summary>
-    public static IServiceCollection AddStrataFxBlazor(this IServiceCollection services, Action<PropertyEditorRegistry>? configureEditors = null)
+    /// <summary>
+    /// Adds the MudBlazor-based StrataFx UI. Use <paramref name="themes"/> to change the default theme,
+    /// add your own (<see cref="StrataThemes.Create"/>) or turn off the user theme switcher.
+    /// </summary>
+    public static IServiceCollection AddStrataFxBlazor(this IServiceCollection services,
+        Action<PropertyEditorRegistry>? configureEditors = null,
+        Action<StrataThemeOptions>? themes = null)
     {
         services.AddMudServices();
         var registry = new PropertyEditorRegistry();
         configureEditors?.Invoke(registry);
         services.AddSingleton(registry);
+
+        var themeOptions = new StrataThemeOptions();
+        themes?.Invoke(themeOptions);
+        services.AddSingleton(themeOptions);
+        services.AddScoped<StrataThemeState>();
         return services;
     }
 }

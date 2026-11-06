@@ -1,0 +1,43 @@
+/* StrataFx slim chrome: hairline borders instead of shadows. Colors come from the active MudBlazor theme. */
+
+.mud-appbar {
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.mud-drawer.mud-drawer-pos-left {
+    border-right: 1px solid var(--mud-palette-lines-default);
+}
+
+.mud-table-head .mud-table-cell {
+    font-weight: 500;
+    color: var(--mud-palette-text-secondary);
+}
+
+.mud-table-dense .mud-table-row .mud-table-cell {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.mud-nav-link {
+    border-radius: var(--mud-default-borderradius);
+}
+
+.strata-theme-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid var(--mud-palette-lines-default);
+    flex: none;
+}
+
+.strata-theme-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 200px;
+}
+
+.strata-theme-item .strata-theme-name {
+    flex: 1;
+}

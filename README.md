@@ -78,6 +78,12 @@ in your layout, and you get `/app/customer` (list) and `/app/customer/{id}` (det
 - **Security**: allow-all by default; `fx.UsePermissionPolicy(...)` enables role-based type permissions,
   checked in the UI and enforced by the data store.
 - **Editors**: replace or add property editors with `AddStrataFxBlazor(e => e.Register<MyEditor>("name"))`
+- **Themes**: slim built-in themes (Fluent slim by default, plus Graphite, Indigo slate, Nordic and Zinc emerald),
+  each with light and dark palettes. Use `<StrataThemeProvider />` instead of `<MudThemeProvider />`, link
+  `_content/StrataFx.Blazor/strata.css`, and put `<StrataThemeSwitcher />` in the app bar so users can pick a theme
+  and mode (remembered in their browser). Configure with
+  `AddStrataFxBlazor(themes: t => { t.DefaultThemeId = StrataThemes.Nordic.Id; t.Themes.Add(StrataThemes.Create(...)); })`,
+  or set `t.AllowUserSelection = false` to give everyone the default.
   and pick them with `[PropertyEditor("name")]`.
 
 ## Run the sample

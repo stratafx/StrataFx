@@ -1,0 +1,61 @@
+@* Theme chooser for the app bar's right corner: pick a theme and light, dark or system mode. Hidden when user selection is off. *@
+@implements IDisposable
+@inject StrataThemeState State
+
+@if (State.Options.AllowUserSelection)
+{
+    <MudTooltip Text="Theme">
+        <MudMenu Icon="@Icons.Material.Outlined.Palette" Color="Color.Inherit" aria-label="Choose theme"
+                 AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+            <MudText Typo="Typo.overline" Class="px-4 pt-2 d-block" Style="color: var(--mud-palette-text-secondary)">Theme</MudText>
+            @foreach (var theme in State.Options.Themes)
+            {
+                var colors = Dark ? theme.Dark : theme.Light;
+                var selected = theme == State.Current;
+                <MudMenuItem OnClick="() => State.SetTheme(theme.Id)" aria-checked="@(selected ? "true" : "false")" role="menuitemradio">
+                    <div class="strata-theme-item" title="@theme.Description">
+                        <span class="strata-theme-swatch" style="background: @colors.Primary"></span>
+                        <span class="strata-theme-name">@theme.Name</span>
+                        @if (selected)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Primary" />
+                        }
+                    </div>
+                </MudMenuItem>
+            }
+            <MudDivider Class="my-1" />
+            <MudText Typo="Typo.overline" Class="px-4 pt-1 d-block" Style="color: var(--mud-palette-text-secondary)">Mode</MudText>
+            @foreach (var (mode, label, icon) in Modes)
+            {
+                var selected = mode == State.ColorMode;
+                <MudMenuItem OnClick="() => State.SetColorMode(mode)" aria-checked="@(selected ? "true" : "false")" role="menuitemradio">
+                    <div class="strata-theme-item">
+                        <MudIcon Icon="@icon" Size="Size.Small" Style="color: var(--mud-palette-text-secondary)" />
+                        <span class="strata-theme-name">@label</span>
+                        @if (selected)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Primary" />
+                        }
+                    </div>
+                </MudMenuItem>
+            }
+        </MudMenu>
+    </MudTooltip>
+}
+
+@code {
+    private static readonly (StrataColorMode Mode, string Label, string Icon)[] Modes =
+    [
+        (StrataColorMode.Light, "Light", Icons.Material.Outlined.LightMode),
+        (StrataColorMode.Dark, "Dark", Icons.Material.Outlined.DarkMode),
+        (StrataColorMode.System, "Use system setting", Icons.Material.Outlined.SettingsBrightness),
+    ];
+
+    private bool Dark => State.ColorMode == StrataColorMode.Dark;
+
+    protected override void OnInitialized() => State.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => State.Changed -= OnChanged;
+}
