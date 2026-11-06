@@ -72,19 +72,27 @@ in your layout, and you get `/app/customer` (list) and `/app/customer/{id}` (det
     *New* pre-fills the parent and returns to it after saving.
   - Use `[InverseProperty]` when the item has more than one reference to the parent type.
 - **Save handlers**: `IEntitySaveHandler` runs before validation on every save, e.g. to compute totals.
+- **Change handlers**: `EntityChangeHandler<T>` (or `IEntityChangeHandler`) reacts when a user changes a field in a
+  form, before saving, and the form shows the result right away. In the sample, picking a product fills in the line's
+  unit price, and the order total updates as lines change. For a row of an owned collection, the row's handlers run
+  first, then the parent's for the collection property; adding or removing a row raises a change on the parent too.
+  The context also has `ParentEntity` and `ParentInstance` (for rows), `Kind`, `Item`, and `Data` for lookups.
+  Register with `fx.AddChangeHandler<T>()`. Values handlers set don't raise further changes, and failures show a
+  message without breaking the form. Keep values that must be right in a save handler too, since data can be saved
+  without a form.
 - **Commands**: business operations shown as buttons (`StrataCommand<T>`), resolved from DI.
 - **Rules**: validation beyond data annotations (`IEntityRule`), enforced in the UI and the data store.
-- **Modules**: `StrataModule` bundles entities, model layers, commands, rules and permissions.
+- **Modules**: `StrataModule` bundles entities, model layers, commands, rules, save and change handlers, and permissions.
 - **Security**: allow-all by default; `fx.UsePermissionPolicy(...)` enables role-based type permissions,
   checked in the UI and enforced by the data store.
 - **Editors**: replace or add property editors with `AddStrataFxBlazor(e => e.Register<MyEditor>("name"))`
+  and pick them with `[PropertyEditor("name")]`.
 - **Themes**: slim built-in themes (Fluent slim by default, plus Graphite, Indigo slate, Nordic and Zinc emerald),
   each with light and dark palettes. Use `<StrataThemeProvider />` instead of `<MudThemeProvider />`, link
   `_content/StrataFx.Blazor/strata.css`, and put `<StrataThemeSwitcher />` in the app bar so users can pick a theme
   and mode (remembered in their browser). Configure with
   `AddStrataFxBlazor(themes: t => { t.DefaultThemeId = StrataThemes.Nordic.Id; t.Themes.Add(StrataThemes.Create(...)); })`,
   or set `t.AllowUserSelection = false` to give everyone the default.
-  and pick them with `[PropertyEditor("name")]`.
 
 ## Run the sample
 

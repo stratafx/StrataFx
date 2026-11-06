@@ -2,6 +2,7 @@
 @inject IDataStore Data
 @inject IPermissionService Permissions
 @inject EntityValidator Validator
+@inject EntityChangeDispatcher ChangeDispatcher
 @inject PropertyEditorRegistry Editors
 @inject NavigationManager Navigation
 @inject IDialogService Dialogs
@@ -164,7 +165,23 @@ else
         [nameof(PropertyEditorBase.Changed)] = EventCallback.Factory.Create<PropertyModel>(this, OnPropertyChanged),
     };
 
-    private void OnPropertyChanged(PropertyModel property) => _errors.Remove(property.Name);
+    /// <summary>
+    /// Runs change handlers so dependent fields update before saving. Owned collections run their own (row first,
+    /// then this record's collection property), so they are not run again here. The form re-renders afterwards.
+    /// </summary>
+    private async Task OnPropertyChanged(PropertyModel property)
+    {
+        _errors.Remove(property.Name);
+        if (_instance is null || property.EditorKind == EditorKind.Collection && property.CollectionKind == CollectionKind.Owned) return;
+        try
+        {
+            await ChangeDispatcher.PropertyChangedAsync(Entity, _instance, property);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+        }
+    }
 
     private async Task SaveAsync(bool close)
     {

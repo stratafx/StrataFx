@@ -1,6 +1,8 @@
 @* Owned collections: an editable grid saved with the parent. Related collections: an embedded, filtered list. *@
 @inherits PropertyEditorBase
 @inject PropertyEditorRegistry Editors
+@inject EntityChangeDispatcher ChangeDispatcher
+@inject ISnackbar Snackbar
 
 @if (Property.CollectionKind == CollectionKind.Owned)
 {
@@ -97,20 +99,39 @@ else
         [nameof(Instance)] = item,
         [nameof(ReadOnly)] = IsReadOnly,
         [nameof(Compact)] = true,
-        [nameof(Changed)] = EventCallback.Factory.Create<PropertyModel>(this, () => Changed.InvokeAsync(Property)),
+        [nameof(Changed)] = EventCallback.Factory.Create<PropertyModel>(this,
+            changed => NotifyAsync(() => ChangeDispatcher.ItemChangedAsync(Property, Instance, item, changed))),
     };
 
     private async Task AddAsync()
     {
-        Property.AddItem(Instance, Element.CreateInstance());
+        var item = Element.CreateInstance();
+        Property.AddItem(Instance, item);
         _items = Property.GetItems(Instance).ToList();
-        await Changed.InvokeAsync(Property);
+        await NotifyAsync(() => ChangeDispatcher.ItemAddedAsync(Property, Instance, item));
     }
 
     private async Task RemoveAsync(object item)
     {
         Property.RemoveItem(Instance, item);
         _items.Remove(item);
+        await NotifyAsync(() => ChangeDispatcher.ItemRemovedAsync(Property, Instance, item));
+    }
+
+    /// <summary>
+    /// Runs change handlers (the row's, then the parent's for this collection), then tells the form so it
+    /// re-renders and dependent fields such as totals update. A failing handler shows a message, not an error page.
+    /// </summary>
+    private async Task NotifyAsync(Func<Task> dispatch)
+    {
+        try
+        {
+            await dispatch();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+        }
         await Changed.InvokeAsync(Property);
     }
 }

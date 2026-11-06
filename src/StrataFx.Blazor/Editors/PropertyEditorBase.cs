@@ -5,7 +5,8 @@ namespace StrataFx.Blazor.Editors;
 
 /// <summary>
 /// Base class for property editors. An editor reads and writes one property of <see cref="Instance"/>
-/// and raises <see cref="Changed"/> after writing. Inherit from it to build custom editors.
+/// and raises <see cref="Changed"/> after writing a new value. Inherit from it to build custom editors.
+/// The form runs change handlers (<see cref="StrataFx.Changes.IEntityChangeHandler"/>) when <see cref="Changed"/> is raised.
 /// </summary>
 public abstract class PropertyEditorBase : ComponentBase
 {
@@ -27,8 +28,10 @@ public abstract class PropertyEditorBase : ComponentBase
 
     protected object? Value => Property.GetValue(Instance);
 
+    /// <summary>Writes the value and raises <see cref="Changed"/>. Does nothing when the value is unchanged.</summary>
     protected async Task SetValueAsync(object? value)
     {
+        if (Property.ValueEquals(Property.GetValue(Instance), value)) return;
         Property.SetValue(Instance, value);
         await Changed.InvokeAsync(Property);
     }

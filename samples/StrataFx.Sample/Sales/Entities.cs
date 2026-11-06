@@ -81,7 +81,7 @@ public class Order
     [Display(Name = "Shipped on")]
     public DateTime? ShippedOn { get; set; }
 
-    // Calculated from the lines on every save (see OrderTotals), so it is read-only in the form.
+    // Calculated from the lines: live in the form (OrderLiveTotal) and on every save (OrderTotals), so it is read-only.
     [Editable(false), DisplayFormat(DataFormatString = "{0:N2}")]
     public decimal Total { get; set; }
 

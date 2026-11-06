@@ -1,3 +1,4 @@
+using StrataFx.Changes;
 using StrataFx.Commands;
 using StrataFx.Hosting;
 using StrataFx.Model;
@@ -28,6 +29,8 @@ public sealed class SalesModule : StrataModule
         fx.AddCommand<ShipOrderCommand>();
         fx.AddRule<OrderRules>();
         fx.AddSaveHandler<OrderTotals>();
+        fx.AddChangeHandler<OrderLinePricing>();
+        fx.AddChangeHandler<OrderLiveTotal>();
     }
 
     public override void ConfigureSecurity(PermissionPolicy policy)
@@ -100,14 +103,37 @@ public sealed class OrderRules : IEntityRule
     }
 }
 
-/// <summary>Keeps the stored order total in step with its lines.</summary>
+/// <summary>Keeps the stored order total in step with its lines. The source of truth: runs on every save, with or without a form.</summary>
 public sealed class OrderTotals : StrataFx.Data.IEntitySaveHandler
 {
+    public static decimal Calculate(Order order) => order.Lines.Sum(l => l.LineTotal);
+
     public bool AppliesTo(EntityModel entity) => entity.ClrType == typeof(Order);
 
-    public void BeforeSave(EntityModel entity, object instance, bool isNew)
+    public void BeforeSave(EntityModel entity, object instance, bool isNew) => ((Order)instance).Total = Calculate((Order)instance);
+}
+
+/// <summary>
+/// Picking a product on an order line fills in its current price. It runs only when the product changes,
+/// so a price typed by hand stays until a different product is picked.
+/// </summary>
+public sealed class OrderLinePricing : EntityChangeHandler<OrderLine>
+{
+    protected override ValueTask OnChangedAsync(OrderLine line, PropertyChangeContext context)
     {
-        var order = (Order)instance;
-        order.Total = order.Lines.Sum(l => l.LineTotal);
+        if (context.Is(nameof(OrderLine.Product)) && line.Product is { } product)
+            line.UnitPrice = product.Price;
+        return ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>Updates the order total in the form as lines are added, removed or changed (OrderTotals sets it again on save).</summary>
+public sealed class OrderLiveTotal : EntityChangeHandler<Order>
+{
+    protected override ValueTask OnChangedAsync(Order order, PropertyChangeContext context)
+    {
+        if (context.Is(nameof(Order.Lines)))
+            order.Total = OrderTotals.Calculate(order);
+        return ValueTask.CompletedTask;
     }
 }

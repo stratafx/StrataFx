@@ -221,6 +221,19 @@ public sealed class PropertyModel
 
     public object? GetValue(object instance) => Info.GetValue(instance);
 
+    /// <summary>
+    /// True when two values of this property are the same. References are compared by key, because lookups
+    /// can return a different object for the same record.
+    /// </summary>
+    public bool ValueEquals(object? a, object? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        if (ReferenceEntity is { } target && target.ClrType.IsInstanceOfType(a) && target.ClrType.IsInstanceOfType(b))
+            return !target.IsNew(a) && !target.IsNew(b) && Equals(target.GetKey(a), target.GetKey(b));
+        return Equals(a, b);
+    }
+
     public void SetValue(object instance, object? value)
     {
         if (!Info.CanWrite) throw new InvalidOperationException($"{Owner.ClrType.Name}.{Name} is read-only.");

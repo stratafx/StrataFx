@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using StrataFx.Changes;
 using StrataFx.Commands;
 using StrataFx.Model;
 using StrataFx.Security;
@@ -18,7 +19,7 @@ public abstract class StrataModule
     /// <summary>Add entities and code-based model layers.</summary>
     public virtual void ConfigureModel(AppModelBuilder model) { }
 
-    /// <summary>Register services and commands.</summary>
+    /// <summary>Register services, commands, rules, save handlers and change handlers.</summary>
     public virtual void ConfigureServices(StrataFxBuilder fx) { }
 
     public virtual void ConfigureSecurity(PermissionPolicy policy) { }
@@ -84,6 +85,13 @@ public sealed class StrataFxBuilder
         return this;
     }
 
+    /// <summary>Adds a handler that reacts to field changes in forms before saving. Handlers run in registration order.</summary>
+    public StrataFxBuilder AddChangeHandler<THandler>() where THandler : class, IEntityChangeHandler
+    {
+        Services.AddScoped<IEntityChangeHandler, THandler>();
+        return this;
+    }
+
     /// <summary>Switches from allow-all to role-based permissions.</summary>
     public StrataFxBuilder UsePermissionPolicy(Action<PermissionPolicy> configure)
     {
@@ -102,6 +110,7 @@ public sealed class StrataFxBuilder
         Services.AddSingleton(model);
         Services.TryAddScoped<ICurrentUser, AnonymousUser>();
         Services.AddScoped<EntityValidator>();
+        Services.AddScoped<EntityChangeDispatcher>();
 
         if (_policy is not null)
         {
