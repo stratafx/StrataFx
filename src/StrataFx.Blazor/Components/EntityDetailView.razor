@@ -14,13 +14,13 @@
 else if (_instance is null)
 {
     <MudAlert Severity="Severity.Warning">This @Entity.Caption.ToLowerInvariant() was not found. It may have been deleted.</MudAlert>
-    <MudButton Href="@StrataRoutes.List(Entity)" Class="mt-4" StartIcon="@Icons.Material.Filled.ArrowBack">Back to @Entity.PluralCaption</MudButton>
+    <MudButton Href="@BackUrl" Class="mt-4" StartIcon="@Icons.Material.Filled.ArrowBack">Back</MudButton>
 }
 else
 {
     <MudPaper Elevation="1" Class="pa-4">
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4" Wrap="Wrap.Wrap">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@StrataRoutes.List(Entity)" aria-label="Back" />
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackUrl" aria-label="Back" />
             <MudText Typo="Typo.h5">@Title</MudText>
             <MudSpacer />
             @if (!_isNew)
@@ -61,6 +61,14 @@ else
                 }
             </MudGrid>
         }
+
+        @* Collections go last and full width: owned items as an editable grid, related records as a list. *@
+        @foreach (var collection in _collections)
+        {
+            <div class="mt-6">
+                <DynamicComponent Type="@Editors.Resolve(collection)" Parameters="@EditorParameters(collection)" />
+            </div>
+        }
     </MudPaper>
 }
 
@@ -68,8 +76,10 @@ else
     private object? _instance;
     private bool _isNew, _loading = true, _busy, _canSave, _canDelete;
     private List<IGrouping<string?, PropertyModel>> _groups = [];
+    private List<PropertyModel> _collections = [];
     private Dictionary<string, string> _errors = [];
     private List<string> _generalErrors = [];
+    private Dictionary<string, string> _query = [];
 
     [Parameter, EditorRequired] public EntityModel Entity { get; set; } = null!;
 
@@ -78,10 +88,15 @@ else
 
     private string Title => _isNew ? $"New {Entity.Caption}" : Entity.GetDisplayText(_instance) is { Length: > 0 } text ? text : Entity.Caption;
 
+    /// <summary>Where Back, Save &amp; Close and Delete go: the page that opened this one (e.g. the parent record), or the list.</summary>
+    private string BackUrl => StrataRoutes.SafeReturnUrl(_query.GetValueOrDefault(StrataRoutes.ReturnUrlParameter)) ?? StrataRoutes.List(Entity);
+
     protected override async Task OnParametersSetAsync()
     {
         _isNew = Key is null;
-        _groups = Entity.DetailItems.GroupBy(p => p.Group).ToList();
+        _query = StrataRoutes.ParseQuery(Navigation.Uri);
+        _groups = Entity.DetailItems.Where(p => p.EditorKind != EditorKind.Collection).GroupBy(p => p.Group).ToList();
+        _collections = Entity.DetailItems.Where(p => p.EditorKind == EditorKind.Collection).ToList();
         _canSave = Permissions.IsAllowed(Entity.ClrType, _isNew ? EntityOperation.Create : EntityOperation.Update);
         _canDelete = Permissions.IsAllowed(Entity.ClrType, EntityOperation.Delete);
         _errors = [];
@@ -94,7 +109,15 @@ else
         _loading = true;
         try
         {
-            _instance = _isNew ? Entity.CreateInstance() : await Data.FindAsync(Entity, Entity.ParseKey(Key!));
+            if (_isNew)
+            {
+                _instance = Entity.CreateInstance();
+                await PrefillReferencesAsync(_instance);
+            }
+            else
+            {
+                _instance = await Data.FindAsync(Entity, Entity.ParseKey(Key!));
+            }
         }
         catch (FormatException)
         {
@@ -108,6 +131,24 @@ else
         finally
         {
             _loading = false;
+        }
+    }
+
+    /// <summary>New records opened from a parent (e.g. ?Customer=5) start with that reference filled in.</summary>
+    private async Task PrefillReferencesAsync(object instance)
+    {
+        foreach (var reference in Entity.References)
+        {
+            if (!_query.TryGetValue(reference.Name, out var keyText)) continue;
+            try
+            {
+                if (await Data.FindAsync(reference.ReferenceEntity!, reference.ReferenceEntity!.ParseKey(keyText)) is { } target)
+                    reference.SetValue(instance, target);
+            }
+            catch (FormatException)
+            {
+                // A malformed key in the URL just means nothing is pre-filled.
+            }
         }
     }
 
@@ -132,8 +173,19 @@ else
         {
             await Data.SaveAsync(Entity, _instance, _isNew);
             Snackbar.Add($"{Entity.Caption} saved.", Severity.Success);
-            if (close) Navigation.NavigateTo(StrataRoutes.List(Entity));
-            else if (_isNew) Navigation.NavigateTo(StrataRoutes.Detail(Entity, _instance), replace: true);
+            if (close)
+            {
+                Navigation.NavigateTo(BackUrl);
+            }
+            else if (_isNew)
+            {
+                var returnUrl = _query.GetValueOrDefault(StrataRoutes.ReturnUrlParameter);
+                Navigation.NavigateTo(StrataRoutes.WithQuery(StrataRoutes.Detail(Entity, _instance), (StrataRoutes.ReturnUrlParameter, returnUrl)), replace: true);
+            }
+            else
+            {
+                await LoadAsync(); // pick up generated keys of new items and values set by save handlers
+            }
         }
         catch (StrataValidationException ex)
         {
@@ -171,7 +223,7 @@ else
         {
             await Data.DeleteAsync(Entity, [_instance]);
             Snackbar.Add($"{Entity.Caption} deleted.", Severity.Success);
-            Navigation.NavigateTo(StrataRoutes.List(Entity));
+            Navigation.NavigateTo(BackUrl);
         }
         catch (Exception ex)
         {

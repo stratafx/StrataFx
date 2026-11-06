@@ -18,9 +18,13 @@ namespace StrataFx.EFCore;
 public sealed class EfDataStore<TContext>(
     IDbContextFactory<TContext> contextFactory,
     IPermissionService permissions,
-    EntityValidator validator) : IDataStore
+    EntityValidator validator,
+    IEnumerable<IEntitySaveHandler> saveHandlers) : IDataStore
     where TContext : DbContext
 {
+    public EfDataStore(IDbContextFactory<TContext> contextFactory, IPermissionService permissions, EntityValidator validator)
+        : this(contextFactory, permissions, validator, []) { }
+
     private const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
     private static readonly MethodInfo QueryMethod = typeof(EfDataStore<TContext>).GetMethod(nameof(QueryCore), Private)!;
@@ -51,12 +55,12 @@ public sealed class EfDataStore<TContext>(
     public async Task SaveAsync(EntityModel entity, object instance, bool isNew, CancellationToken cancellationToken = default)
     {
         permissions.Demand(entity.ClrType, isNew ? EntityOperation.Create : EntityOperation.Update);
+        foreach (var handler in saveHandlers.Where(h => h.AppliesTo(entity)))
+            handler.BeforeSave(entity, instance, isNew);
         validator.ThrowIfInvalid(entity, instance);
 
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var entry = isNew ? db.Add(instance) : db.Update(instance);
-        AttachReferencesAsUnchanged(db, entry);
-        await db.SaveChangesAsync(cancellationToken);
+        await new EfGraphSaver(db).SaveAsync(entity, instance, isNew, cancellationToken);
     }
 
     public async Task DeleteAsync(EntityModel entity, IEnumerable<object> instances, CancellationToken cancellationToken = default)
@@ -79,7 +83,10 @@ public sealed class EfDataStore<TContext>(
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         var efType = db.Model.FindEntityType(typeof(T))
             ?? throw new InvalidOperationException($"'{typeof(T).Name}' is not part of {typeof(TContext).Name}. Add a DbSet for it.");
-        var query = IncludeReferences(db.Set<T>().AsNoTracking(), entity);
+        var query = IncludeReferences(db.Set<T>().AsNoTracking(), entity, efType);
+
+        foreach (var filter in request.Filters)
+            query = query.Where(BuildFilter<T>(entity, filter));
 
         if (!string.IsNullOrWhiteSpace(request.Search) && BuildSearch<T>(entity, efType, request.Search) is { } predicate)
             query = query.Where(predicate);
@@ -94,12 +101,25 @@ public sealed class EfDataStore<TContext>(
     private async Task<object?> FindCore<T>(EntityModel entity, object key, CancellationToken ct) where T : class
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var efType = db.Model.FindEntityType(typeof(T))!;
         var x = Expression.Parameter(typeof(T), "x");
         var equals = Expression.Equal(
             Expression.Property(x, entity.Key.Info),
             Expression.Constant(key, entity.Key.PropertyType));
-        return await IncludeReferences(db.Set<T>().AsNoTracking(), entity)
-            .FirstOrDefaultAsync(Expression.Lambda<Func<T, bool>>(equals, x), ct);
+
+        // A full record: references, plus owned collections and their items' references.
+        var query = IncludeReferences(db.Set<T>().AsNoTracking(), entity, efType);
+        foreach (var collection in entity.OwnedCollections.Where(c => efType.FindNavigation(c.Name) is not null))
+        {
+            query = query.Include(collection.Name);
+            var itemType = efType.FindNavigation(collection.Name)!.TargetEntityType;
+            foreach (var reference in collection.ElementEntity!.References)
+            {
+                if (reference != collection.InverseReference && itemType.FindNavigation(reference.Name) is not null)
+                    query = query.Include($"{collection.Name}.{reference.Name}");
+            }
+        }
+        return await query.FirstOrDefaultAsync(Expression.Lambda<Func<T, bool>>(equals, x), ct);
     }
 
     private async Task<IReadOnlyList<object>> LookupCore<T>(EntityModel entity, string? search, int take, CancellationToken ct) where T : class
@@ -123,11 +143,43 @@ public sealed class EfDataStore<TContext>(
     private Task<TResult> Invoke<TResult>(MethodInfo method, EntityModel entity, params object?[] args) =>
         (Task<TResult>)method.MakeGenericMethod(entity.ClrType).Invoke(this, args)!;
 
-    private static IQueryable<T> IncludeReferences<T>(IQueryable<T> query, EntityModel entity) where T : class
+    private static IQueryable<T> IncludeReferences<T>(IQueryable<T> query, EntityModel entity, IEntityType efType) where T : class
     {
-        foreach (var reference in entity.Properties.Where(p => p.EditorKind == EditorKind.Reference))
+        foreach (var reference in entity.References.Where(r => efType.FindNavigation(r.Name) is not null))
             query = query.Include(reference.Name);
         return query;
+    }
+
+    /// <summary>x => x.Prop == value, or x => x.Reference.Key == value for references.</summary>
+    private static Expression<Func<T, bool>> BuildFilter<T>(EntityModel entity, PropertyFilter filter)
+    {
+        var prop = entity.FindProperty(filter.PropertyName)
+            ?? throw new ArgumentException($"Cannot filter {entity.ClrType.Name} on unknown property '{filter.PropertyName}'.");
+        var x = Expression.Parameter(typeof(T), "x");
+        Expression member = Expression.Property(x, prop.Info);
+        Expression body;
+
+        if (prop.EditorKind == EditorKind.Reference)
+        {
+            var key = prop.ReferenceEntity!.Key;
+            body = filter.Value is null
+                ? Expression.Equal(member, Expression.Constant(null, prop.PropertyType))
+                : Expression.Equal(Expression.Property(member, key.Info), Constant(filter.Value, key.PropertyType));
+        }
+        else
+        {
+            body = Expression.Equal(member, Constant(filter.Value, prop.PropertyType));
+        }
+        return Expression.Lambda<Func<T, bool>>(body, x);
+    }
+
+    private static ConstantExpression Constant(object? value, Type type)
+    {
+        var target = Nullable.GetUnderlyingType(type) ?? type;
+        var converted = value is null || target.IsInstanceOfType(value)
+            ? value
+            : target.IsEnum ? Enum.ToObject(target, value) : Convert.ChangeType(value, target, System.Globalization.CultureInfo.InvariantCulture);
+        return Expression.Constant(converted, type);
     }
 
     /// <summary>OR of LIKE '%term%' over visible text columns and the lookup text of references.</summary>
@@ -198,30 +250,5 @@ public sealed class EfDataStore<TContext>(
             .Single(m => m.Name == name && m.GetParameters().Length == 2)
             .MakeGenericMethod(typeof(T), key.Type);
         return (IQueryable<T>)method.Invoke(null, [query, lambda])!;
-    }
-
-    /// <summary>
-    /// The edited instance carries referenced records loaded by another context. Mark them Unchanged so EF
-    /// does not update them, and sync foreign keys from the navigation (also when it was cleared).
-    /// </summary>
-    private static void AttachReferencesAsUnchanged(DbContext db, EntityEntry entry)
-    {
-        foreach (var reference in entry.References)
-        {
-            if (reference.Metadata is not INavigation { IsOnDependent: true } navigation) continue;
-
-            var target = reference.CurrentValue;
-            if (target is not null) db.Entry(target).State = EntityState.Unchanged;
-
-            var fk = navigation.ForeignKey;
-            for (var i = 0; i < fk.Properties.Count; i++)
-            {
-                var fkProperty = entry.Property(fk.Properties[i].Name);
-                if (target is not null)
-                    fkProperty.CurrentValue = db.Entry(target).Property(fk.PrincipalKey.Properties[i].Name).CurrentValue;
-                else if (fk.Properties[i].IsNullable)
-                    fkProperty.CurrentValue = null;
-            }
-        }
     }
 }

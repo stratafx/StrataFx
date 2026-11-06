@@ -9,13 +9,18 @@
     "customer": {
       "properties": {
         "Phone": { "visibleInList": false },
-        "CreatedOn": { "visibleInList": false }
+        "CreatedOn": { "visibleInList": false },
+        "Orders": { "caption": "Order history" }
       }
     },
     "order": {
       "properties": {
-        "Quantity": { "caption": "Qty" },
         "ShippedOn": { "visibleInList": false }
+      }
+    },
+    "orderline": {
+      "properties": {
+        "Quantity": { "caption": "Qty" }
       }
     }
   }

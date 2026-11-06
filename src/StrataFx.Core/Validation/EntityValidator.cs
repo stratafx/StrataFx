@@ -26,7 +26,11 @@ public sealed class EntityValidator(IEnumerable<IEntityRule> rules)
 {
     public EntityValidator() : this([]) { }
 
-    public IReadOnlyList<ValidationError> Validate(EntityModel entity, object instance)
+    public IReadOnlyList<ValidationError> Validate(EntityModel entity, object instance) =>
+        Validate(entity, instance, parentReference: null);
+
+    /// <param name="parentReference">When validating an owned item: its reference to the parent, which is set on save.</param>
+    private List<ValidationError> Validate(EntityModel entity, object instance, PropertyModel? parentReference)
     {
         var results = new List<ValidationResult>();
         Validator.TryValidateObject(instance, new ValidationContext(instance), results, validateAllProperties: true);
@@ -35,9 +39,12 @@ public sealed class EntityValidator(IEnumerable<IEntityRule> rules)
             .SelectMany(r => r.MemberNames.DefaultIfEmpty(null!).Select(m => new ValidationError(m, r.ErrorMessage ?? "Invalid value.")))
             .ToList();
 
+        if (parentReference is not null)
+            errors.RemoveAll(e => e.PropertyName == parentReference.Name);
+
         foreach (var prop in entity.Properties.Where(p => p.Required && p.VisibleInDetail && !p.ReadOnly))
         {
-            if (errors.Any(e => e.PropertyName == prop.Name)) continue;
+            if (prop == parentReference || errors.Any(e => e.PropertyName == prop.Name)) continue;
             var value = prop.GetValue(instance);
             if (value is null || value is string s && string.IsNullOrWhiteSpace(s))
                 errors.Add(new ValidationError(prop.Name, $"{prop.Caption} is required."));
@@ -45,6 +52,18 @@ public sealed class EntityValidator(IEnumerable<IEntityRule> rules)
 
         foreach (var rule in rules.Where(r => r.AppliesTo(entity)))
             errors.AddRange(rule.Validate(entity, instance));
+
+        // Owned items are saved with the parent, so they are validated with it. Their errors are reported
+        // on the collection, e.g. "Lines, row 2: Quantity must be between 1 and 100."
+        foreach (var collection in entity.OwnedCollections)
+        {
+            var items = collection.GetItems(instance);
+            for (var i = 0; i < items.Count; i++)
+            {
+                foreach (var error in Validate(collection.ElementEntity!, items[i], collection.InverseReference))
+                    errors.Add(new ValidationError(collection.Name, $"{collection.Caption}, row {i + 1}: {error.Message}"));
+            }
+        }
 
         return errors;
     }

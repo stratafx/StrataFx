@@ -38,6 +38,18 @@
         _running = true;
         try
         {
+            // List rows are loaded without owned collections. Commands get complete records, so saving one
+            // from a list cannot drop its items.
+            if (Target == CommandTarget.List && Entity.OwnedCollections.Any())
+            {
+                var full = new List<object>();
+                foreach (var item in context.Selection)
+                {
+                    if (await Data.FindAsync(Entity, Entity.GetKey(item)!) is { } loaded) full.Add(loaded);
+                }
+                context = new CommandContext(Entity, full, Data, Services);
+            }
+
             var result = await command.ExecuteAsync(context);
             if (result.Message is not null)
                 Snackbar.Add(result.Message, result.Success ? Severity.Success : Severity.Warning);

@@ -49,12 +49,11 @@ public class AppModelBuilderTests
     }
 
     [Fact]
-    public void Skips_collections_and_hides_foreign_keys()
+    public void Hides_foreign_keys()
     {
         var model = Build();
         var contact = model.GetEntity(typeof(Contact));
 
-        Assert.Null(model.GetEntity(typeof(Company)).FindProperty("Contacts"));
         Assert.False(contact.FindProperty("CompanyId")!.VisibleInDetail);
         Assert.False(contact.FindProperty("ReferrerId")!.VisibleInList);
         Assert.Same(model.GetEntity(typeof(Company)), contact.FindProperty("Company")!.ReferenceEntity);

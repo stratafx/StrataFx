@@ -12,6 +12,8 @@ public sealed class CrmContext(DbContextOptions<CrmContext> options) : DbContext
 {
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<Contact> Contacts => Set<Contact>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,7 +27,7 @@ public sealed class CrmContext(DbContextOptions<CrmContext> options) : DbContext
 public sealed class EfDataStoreTests : IAsyncLifetime
 {
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
-    private readonly AppModel _model = new AppModelBuilder().AddEntity<Company>().AddEntity<Contact>().Build();
+    private readonly AppModel _model = CollectionModelTests.Build();
     private DbContextOptions<CrmContext> _options = null!;
 
     private EntityModel Companies => _model.GetEntity(typeof(Company));

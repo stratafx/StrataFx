@@ -15,9 +15,14 @@ public abstract class PropertyEditorBase : ComponentBase
     [Parameter] public string? Error { get; set; }
     [Parameter] public EventCallback<PropertyModel> Changed { get; set; }
 
+    /// <summary>True inside grids (owned collections): no label, tighter spacing. The column header shows the caption.</summary>
+    [Parameter] public bool Compact { get; set; }
+
     protected bool IsReadOnly => ReadOnly || Property.ReadOnly;
     protected bool HasError => Error is not null;
-    protected string Label => Property.Required && !IsReadOnly ? Property.Caption + " *" : Property.Caption;
+    protected string? Label => Compact ? null : Property.Required && !IsReadOnly ? Property.Caption + " *" : Property.Caption;
+    protected MudBlazor.Margin EditorMargin => Compact ? MudBlazor.Margin.Dense : MudBlazor.Margin.Normal;
+    protected string? HelperText => Compact ? null : Property.Description;
 
     protected object? Value => Property.GetValue(Instance);
 

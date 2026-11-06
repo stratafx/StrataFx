@@ -11,7 +11,8 @@ public sealed class SalesModule : StrataModule
 {
     public override void ConfigureModel(AppModelBuilder model)
     {
-        model.AddEntitiesFrom(typeof(SalesModule).Assembly);
+        model.AddEntitiesFrom(typeof(SalesModule).Assembly); // classes marked [StrataEntity]
+        model.AddEntity<OrderLine>();                        // plain classes can be added directly
 
         // A code layer: the same kind of change a JSON layer can make, but compiled.
         model.AddLayer(new DelegateModelLayer("Sales defaults", app =>
@@ -26,6 +27,7 @@ public sealed class SalesModule : StrataModule
         fx.AddCommand<MarkVipCommand>();
         fx.AddCommand<ShipOrderCommand>();
         fx.AddRule<OrderRules>();
+        fx.AddSaveHandler<OrderTotals>();
     }
 
     public override void ConfigureSecurity(PermissionPolicy policy)
@@ -93,7 +95,19 @@ public sealed class OrderRules : IEntityRule
         var order = (Order)instance;
         if (order.OrderDate.Date > DateTime.Today)
             yield return new ValidationError(nameof(Order.OrderDate), "Order date cannot be in the future.");
-        if (order.Status == OrderStatus.Shipped && order.Product is { InStock: false })
-            yield return new ValidationError(nameof(Order.Product), "An out-of-stock product cannot be shipped.");
+        if (order.Status == OrderStatus.Shipped && order.Lines.FirstOrDefault(l => l.Product is { InStock: false }) is { } line)
+            yield return new ValidationError(nameof(Order.Lines), $"{line.Product.Name} is out of stock, so the order cannot be shipped.");
+    }
+}
+
+/// <summary>Keeps the stored order total in step with its lines.</summary>
+public sealed class OrderTotals : StrataFx.Data.IEntitySaveHandler
+{
+    public bool AppliesTo(EntityModel entity) => entity.ClrType == typeof(Order);
+
+    public void BeforeSave(EntityModel entity, object instance, bool isNew)
+    {
+        var order = (Order)instance;
+        order.Total = order.Lines.Sum(l => l.LineTotal);
     }
 }

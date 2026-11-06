@@ -63,6 +63,14 @@ public sealed class DisplayFormatStringAttribute(string format) : Attribute
     public string Format { get; } = format;
 }
 
+/// <summary>
+/// Marks a collection whose items belong to the parent (e.g. order lines). Items are edited inside the
+/// parent's form and saved, added and deleted together with it. Collections without this attribute are
+/// "related": shown as a linked list of separate records (e.g. a customer's orders).
+/// </summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class OwnedCollectionAttribute : Attribute;
+
 /// <summary>Picks a named custom property editor registered in the UI layer.</summary>
 [AttributeUsage(AttributeTargets.Property)]
 public sealed class PropertyEditorAttribute(string editorName) : Attribute

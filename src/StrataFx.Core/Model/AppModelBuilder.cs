@@ -67,6 +67,8 @@ public sealed class AppModelBuilder
         var nullability = new NullabilityInfoContext();
         foreach (var entity in entities)
             AddProperties(entity, byType, nullability);
+        foreach (var entity in entities)
+            LinkCollections(entity);
 
         var model = new AppModel(Title, entities);
         foreach (var layer in _layers)
@@ -112,17 +114,26 @@ public sealed class AppModelBuilder
         foreach (var info in infos)
         {
             index++;
-            var kind = ResolveKind(info, entities, out var referenceEntity);
-            if (kind is null) continue; // collections and unsupported complex types are not shown (yet)
+            var kind = ResolveKind(info, entities, out var referenceEntity, out var elementEntity);
+            if (kind is null) continue; // unsupported types (complex objects, collections of non-entities) are not shown
 
             var prop = new PropertyModel(entity, info)
             {
                 EditorKind = kind.Value,
                 ReferenceEntity = referenceEntity,
+                ElementEntity = elementEntity,
                 Caption = Humanizer.SplitWords(info.Name),
                 Order = index * 10,
-                ReadOnly = info.SetMethod is null || !info.SetMethod.IsPublic,
+                // Collections are edited in place, so a getter-only collection is still editable.
+                ReadOnly = kind != EditorKind.Collection && (info.SetMethod is null || !info.SetMethod.IsPublic),
             };
+            if (kind == EditorKind.Collection)
+            {
+                prop.CollectionKind = info.GetCustomAttribute<OwnedCollectionAttribute>() is not null
+                    ? CollectionKind.Owned
+                    : CollectionKind.Related;
+                prop.VisibleInList = false;
+            }
             ApplyAnnotations(prop, info);
 
             if (kind == EditorKind.Reference && !prop.Required)
@@ -155,13 +166,45 @@ public sealed class AppModelBuilder
               ?? entity.Properties.FirstOrDefault(p => p.UnderlyingType == typeof(string) && !p.IsKey);
     }
 
-    private static EditorKind? ResolveKind(PropertyInfo info, Dictionary<Type, EntityModel> entities, out EntityModel? reference)
+    /// <summary>
+    /// Finds the reference on each collection's item type that points back to the parent, and hides
+    /// owned item types from navigation (order lines are reached through their order).
+    /// </summary>
+    private static void LinkCollections(EntityModel entity)
+    {
+        foreach (var collection in entity.Properties.Where(p => p.EditorKind == EditorKind.Collection))
+        {
+            var element = collection.ElementEntity!;
+            var candidates = element.References.Where(r => r.ReferenceEntity == entity).ToList();
+
+            var inverseName = collection.Info.GetCustomAttribute<InversePropertyAttribute>()?.Property
+                ?? candidates.Select(c => c.Info).FirstOrDefault(i =>
+                       i.GetCustomAttribute<InversePropertyAttribute>()?.Property == collection.Name)?.Name;
+
+            collection.InverseReference = inverseName is not null
+                ? element.FindProperty(inverseName)
+                    ?? throw new InvalidOperationException($"[InverseProperty] on {entity.ClrType.Name}.{collection.Name} names unknown property '{inverseName}'.")
+                : candidates.Count == 1 ? candidates[0] : null; // ambiguous without [InverseProperty]
+
+            if (collection.CollectionKind == CollectionKind.Owned)
+                element.VisibleInNavigation = false;
+        }
+    }
+
+    private static EditorKind? ResolveKind(PropertyInfo info, Dictionary<Type, EntityModel> entities,
+        out EntityModel? reference, out EntityModel? element)
     {
         reference = null;
+        element = null;
         var t = Nullable.GetUnderlyingType(info.PropertyType) ?? info.PropertyType;
 
         if (info.GetCustomAttribute<PropertyEditorAttribute>() is not null) return EditorKind.Custom;
         if (entities.TryGetValue(t, out var refEntity)) { reference = refEntity; return EditorKind.Reference; }
+        if (t != typeof(string) && GetElementType(t) is { } itemType && entities.TryGetValue(itemType, out var itemEntity))
+        {
+            element = itemEntity;
+            return EditorKind.Collection;
+        }
         if (t == typeof(string))
         {
             var dataType = info.GetCustomAttribute<DataTypeAttribute>()?.DataType;
@@ -177,8 +220,17 @@ public sealed class AppModelBuilder
             return info.GetCustomAttribute<DataTypeAttribute>()?.DataType == DataType.Date ? EditorKind.Date : EditorKind.DateTime;
         if (t == typeof(int) || t == typeof(long) || t == typeof(short) || t == typeof(byte)) return EditorKind.Integer;
         if (t == typeof(decimal) || t == typeof(double) || t == typeof(float)) return EditorKind.Decimal;
-        if (typeof(IEnumerable).IsAssignableFrom(t)) return null;
         return null;
+    }
+
+    private static Type? GetElementType(Type collectionType)
+    {
+        if (!typeof(IEnumerable).IsAssignableFrom(collectionType)) return null;
+        if (collectionType.IsArray) return null; // arrays can't grow; use List<T> or ICollection<T>
+        var enumerable = collectionType.IsGenericType && collectionType.GetGenericTypeDefinition() == typeof(IEnumerable<>)
+            ? collectionType
+            : collectionType.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+        return enumerable?.GetGenericArguments()[0];
     }
 
     private static void ApplyAnnotations(PropertyModel prop, PropertyInfo info)

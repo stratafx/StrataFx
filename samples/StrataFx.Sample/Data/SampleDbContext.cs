@@ -8,6 +8,7 @@ public sealed class SampleDbContext(DbContextOptions<SampleDbContext> options) :
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderLine> OrderLines => Set<OrderLine>();
 
     // SQLite cannot sort or compare decimals, so the sample stores them as REAL. Not needed on SQL Server or PostgreSQL.
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) =>
@@ -18,6 +19,8 @@ public sealed class SampleDbContext(DbContextOptions<SampleDbContext> options) :
         modelBuilder.Entity<Order>().HasIndex(o => o.Number).IsUnique();
         modelBuilder.Entity<Product>().HasIndex(p => p.Sku).IsUnique();
         modelBuilder.Entity<Order>().HasOne(o => o.Customer).WithMany(c => c.Orders).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<OrderLine>().HasOne(l => l.Order).WithMany(o => o.Lines).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<OrderLine>().HasOne(l => l.Product).WithMany().OnDelete(DeleteBehavior.Restrict);
     }
 
     /// <summary>Creates the database and adds demo data the first time the sample runs.</summary>
@@ -52,19 +55,21 @@ public sealed class SampleDbContext(DbContextOptions<SampleDbContext> options) :
         var statuses = Enum.GetValues<OrderStatus>();
         var orders = Enumerable.Range(1, 120).Select(i =>
         {
-            var product = products[i % products.Count];
-            var quantity = i % 5 + 1;
             var status = statuses[i % statuses.Length];
+            var lines = Enumerable.Range(0, i % 3 + 1).Select(n =>
+            {
+                var product = products[(i + n * 2) % products.Count];
+                return new OrderLine { Product = product, Quantity = (i + n) % 5 + 1, UnitPrice = product.Price };
+            }).ToList();
             return new Order
             {
                 Number = $"SO-{1000 + i}",
                 Customer = customers[i % customers.Count],
-                Product = product,
-                Quantity = quantity,
                 OrderDate = DateTime.Today.AddDays(-i),
                 Status = status,
                 ShippedOn = status == OrderStatus.Shipped ? DateTime.Today.AddDays(-i + 2) : null,
-                Total = product.Price * quantity,
+                Lines = lines,
+                Total = lines.Sum(l => l.LineTotal),
             };
         }).ToList();
 

@@ -1,7 +1,8 @@
 @inherits PropertyEditorBase
 
 <MudCheckBox T="bool"
-             Label="@Property.Caption"
+             Label="@(Compact ? null : Property.Caption)"
+             Dense="@Compact"
              Value="@(Value as bool? ?? false)"
              ValueChanged="@(v => SetValueAsync(v))"
              ReadOnly="@IsReadOnly"

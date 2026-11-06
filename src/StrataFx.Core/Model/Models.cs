@@ -15,7 +15,18 @@ public enum EditorKind
     Enum,
     Guid,
     Reference,
+    Collection,
     Custom,
+}
+
+/// <summary>How a collection property relates to its parent.</summary>
+public enum CollectionKind
+{
+    /// <summary>Separate records that point to the parent (a customer's orders). Shown as a linked list.</summary>
+    Related,
+
+    /// <summary>Items that belong to the parent (order lines). Edited in the parent's form and saved with it.</summary>
+    Owned,
 }
 
 /// <summary>
@@ -83,6 +94,12 @@ public sealed class EntityModel
     public IEnumerable<PropertyModel> DetailItems =>
         Properties.Where(p => p.VisibleInDetail).OrderBy(p => p.Order);
 
+    public IEnumerable<PropertyModel> OwnedCollections =>
+        Properties.Where(p => p.EditorKind == EditorKind.Collection && p.CollectionKind == CollectionKind.Owned);
+
+    public IEnumerable<PropertyModel> References =>
+        Properties.Where(p => p.EditorKind == EditorKind.Reference);
+
     public object CreateInstance() => Activator.CreateInstance(ClrType)
         ?? throw new InvalidOperationException($"Cannot create an instance of '{ClrType.Name}'.");
 
@@ -92,6 +109,14 @@ public sealed class EntityModel
     public object ParseKey(string text) =>
         System.ComponentModel.TypeDescriptor.GetConverter(Key.UnderlyingType).ConvertFromInvariantString(text)
         ?? throw new FormatException($"'{text}' is not a valid key for {ClrType.Name}.");
+
+    /// <summary>True when the instance has not been saved yet (its key is empty).</summary>
+    public bool IsNew(object instance) => GetKey(instance) switch
+    {
+        null => true,
+        string s => s.Length == 0,
+        var k => k.GetType().IsValueType && k.Equals(Activator.CreateInstance(k.GetType())),
+    };
 
     /// <summary>Formats a key for use in URLs.</summary>
     public string FormatKey(object instance) =>
@@ -149,7 +174,50 @@ public sealed class PropertyModel
     /// <summary>For EditorKind.Reference: the referenced entity.</summary>
     public EntityModel? ReferenceEntity { get; internal set; }
 
+    /// <summary>For EditorKind.Collection: the entity of the items.</summary>
+    public EntityModel? ElementEntity { get; internal set; }
+
+    /// <summary>For EditorKind.Collection: whether items are owned by the parent or separate related records.</summary>
+    public CollectionKind CollectionKind { get; set; }
+
+    /// <summary>
+    /// For EditorKind.Collection: the reference on the item that points back to the parent
+    /// (e.g. OrderLine.Order for Order.Lines). Null when the item has no such property.
+    /// </summary>
+    public PropertyModel? InverseReference { get; internal set; }
+
     public bool IsKey => ReferenceEquals(Owner.Key, this);
+
+    // ---- collection helpers (work with List<T>, ICollection<T> and other IList implementations) ----
+
+    public IReadOnlyList<object> GetItems(object instance) =>
+        GetValue(instance) is System.Collections.IEnumerable items ? items.Cast<object>().ToList() : [];
+
+    public void AddItem(object instance, object item)
+    {
+        var collection = GetOrCreateCollection(instance);
+        if (collection is System.Collections.IList list) list.Add(item);
+        else CollectionMethod(collection, "Add").Invoke(collection, [item]);
+    }
+
+    public void RemoveItem(object instance, object item)
+    {
+        var collection = GetOrCreateCollection(instance);
+        if (collection is System.Collections.IList list) list.Remove(item);
+        else CollectionMethod(collection, "Remove").Invoke(collection, [item]);
+    }
+
+    private object GetOrCreateCollection(object instance)
+    {
+        if (GetValue(instance) is { } existing) return existing;
+        var list = Activator.CreateInstance(typeof(List<>).MakeGenericType(ElementEntity!.ClrType))!;
+        SetValue(instance, list);
+        return list;
+    }
+
+    private MethodInfo CollectionMethod(object collection, string name) =>
+        typeof(ICollection<>).MakeGenericType(ElementEntity!.ClrType).GetMethod(name)
+        ?? throw new InvalidOperationException($"{Owner.ClrType.Name}.{Name} does not support {name}.");
 
     public object? GetValue(object instance) => Info.GetValue(instance);
 
@@ -164,6 +232,11 @@ public sealed class PropertyModel
     {
         if (value is null) return "";
         if (ReferenceEntity is not null) return ReferenceEntity.GetDisplayText(value);
+        if (EditorKind == EditorKind.Collection && value is System.Collections.IEnumerable items)
+        {
+            var count = items.Cast<object>().Count();
+            return count == 1 ? "1 item" : $"{count} items";
+        }
         if (value is bool b) return b ? "Yes" : "No";
         if (DisplayFormat is not null && value is IFormattable f) return f.ToString(DisplayFormat, null);
         return EditorKind switch

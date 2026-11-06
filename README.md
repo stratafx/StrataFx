@@ -65,6 +65,13 @@ in your layout, and you get `/app/customer` (list) and `/app/customer/{id}` (det
 
 - **Entities**: any class with a key (`Id`, `{Type}Id` or `[Key]`) and a parameterless constructor.
   Reference properties to other entities become lookups; their foreign-key scalars are hidden automatically.
+- **Collections**: a `List<T>` of another entity is shown on the detail form.
+  - `[OwnedCollection]` (e.g. `Order.Lines`): an editable grid; items are validated, inserted, updated and
+    deleted together with the parent in one save.
+  - Otherwise related (e.g. `Customer.Orders`): an embedded list of separate records, filtered to the parent.
+    *New* pre-fills the parent and returns to it after saving.
+  - Use `[InverseProperty]` when the item has more than one reference to the parent type.
+- **Save handlers**: `IEntitySaveHandler` runs before validation on every save, e.g. to compute totals.
 - **Commands**: business operations shown as buttons (`StrataCommand<T>`), resolved from DI.
 - **Rules**: validation beyond data annotations (`IEntityRule`), enforced in the UI and the data store.
 - **Modules**: `StrataModule` bundles entities, model layers, commands, rules and permissions.
@@ -81,7 +88,6 @@ dotnet run --project samples/StrataFx.Sample
 
 ## Roadmap
 
-- Collection properties (master-detail grids)
 - Per-user model layer stored in the database
 - Row-level and field-level permissions
 - Audit trail, multi-tenancy, reports, dashboards

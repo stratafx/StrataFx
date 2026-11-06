@@ -1,0 +1,116 @@
+@* Owned collections: an editable grid saved with the parent. Related collections: an embedded, filtered list. *@
+@inherits PropertyEditorBase
+@inject PropertyEditorRegistry Editors
+
+@if (Property.CollectionKind == CollectionKind.Owned)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
+        <MudText Typo="Typo.subtitle1"><b>@Property.Caption</b></MudText>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@_items.Count</MudChip>
+        <MudSpacer />
+        @if (!IsReadOnly)
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddAsync">
+                Add @Element.Caption.ToLowerInvariant()
+            </MudButton>
+        }
+    </MudStack>
+
+    <MudPaper Outlined="true" Class="@(HasError ? "mud-border-error" : null)">
+        <MudSimpleTable Dense="true" Hover="true" Style="overflow-x: auto">
+            <thead>
+                <tr>
+                    @foreach (var column in _columns)
+                    {
+                        <th>@(column.Required && !IsReadOnly ? column.Caption + " *" : column.Caption)</th>
+                    }
+                    @if (!IsReadOnly) { <th style="width: 48px"></th> }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in _items)
+                {
+                    <tr @key="item">
+                        @foreach (var column in _columns)
+                        {
+                            <td style="@(column.EditorKind == EditorKind.Reference ? "min-width: 220px" : "min-width: 120px")">
+                                <DynamicComponent Type="@Editors.Resolve(column)" Parameters="@CellParameters(column, item)" />
+                            </td>
+                        }
+                        @if (!IsReadOnly)
+                        {
+                            <td>
+                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
+                                               aria-label="Remove row" OnClick="() => RemoveAsync(item)" />
+                            </td>
+                        }
+                    </tr>
+                }
+                @if (_items.Count == 0)
+                {
+                    <tr><td colspan="@(_columns.Count + 1)"><MudText Typo="Typo.body2" Class="pa-2">No @Element.PluralCaption.ToLowerInvariant() yet.</MudText></td></tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+    @if (HasError)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Error" Class="ml-2">@Error</MudText>
+    }
+}
+else if (Property.InverseReference is null)
+{
+    @* A related list needs the item's reference back to the parent; without it there is nothing to filter on. *@
+}
+else if (Property.Owner.IsNew(Instance))
+{
+    <MudText Typo="Typo.subtitle1"><b>@Property.Caption</b></MudText>
+    <MudAlert Severity="Severity.Info" Dense="true">Save this @Property.Owner.Caption.ToLowerInvariant() first to add @Element.PluralCaption.ToLowerInvariant().</MudAlert>
+}
+else
+{
+    var parentKey = Property.Owner.FormatKey(Instance);
+    <EntityListView Entity="Element"
+                    Title="@Property.Caption"
+                    Embedded="true"
+                    Filters="@([new PropertyFilter(Property.InverseReference.Name, Property.Owner.GetKey(Instance))])"
+                    NewQuery="@([(Property.InverseReference.Name, parentKey)])" />
+}
+
+@code {
+    private List<object> _items = [];
+    private List<PropertyModel> _columns = [];
+
+    private EntityModel Element => Property.ElementEntity!;
+
+    protected override void OnParametersSet()
+    {
+        _items = Property.GetItems(Instance).ToList();
+        _columns = Element.DetailItems
+            .Where(p => p != Property.InverseReference && p.EditorKind is not (EditorKind.Collection or EditorKind.MultilineText))
+            .ToList();
+    }
+
+    private Dictionary<string, object?> CellParameters(PropertyModel column, object item) => new()
+    {
+        [nameof(Property)] = column,
+        [nameof(Instance)] = item,
+        [nameof(ReadOnly)] = IsReadOnly,
+        [nameof(Compact)] = true,
+        [nameof(Changed)] = EventCallback.Factory.Create<PropertyModel>(this, () => Changed.InvokeAsync(Property)),
+    };
+
+    private async Task AddAsync()
+    {
+        Property.AddItem(Instance, Element.CreateInstance());
+        _items = Property.GetItems(Instance).ToList();
+        await Changed.InvokeAsync(Property);
+    }
+
+    private async Task RemoveAsync(object item)
+    {
+        Property.RemoveItem(Instance, item);
+        _items.Remove(item);
+        await Changed.InvokeAsync(Property);
+    }
+}

@@ -13,11 +13,12 @@
           OnRowClick="@((TableRowClickEventArgs<object> e) => Open(e.Item))"
           Hover="true"
           Dense="true"
-          RowsPerPage="25"
-          Elevation="1"
+          RowsPerPage="@(Embedded ? 10 : 25)"
+          Elevation="@(Embedded ? 0 : 1)"
+          Outlined="@Embedded"
           RowStyle="cursor: pointer">
     <ToolBarContent>
-        <MudText Typo="Typo.h6">@Entity.PluralCaption</MudText>
+        <MudText Typo="@(Embedded ? Typo.subtitle1 : Typo.h6)">@(Title ?? Entity.PluralCaption)</MudText>
         <MudSpacer />
         <MudTextField T="string"
                       Value="_search"
@@ -38,8 +39,9 @@
         }
         @if (_canCreate)
         {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                       Href="@StrataRoutes.New(Entity)" Class="ml-2">
+            <MudButton Variant="@(Embedded ? Variant.Outlined : Variant.Filled)" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       Size="@(Embedded ? Size.Small : Size.Medium)"
+                       Href="@NewUrl" Class="ml-2">
                 New
             </MudButton>
         }
@@ -85,9 +87,33 @@
 
     [Parameter, EditorRequired] public EntityModel Entity { get; set; } = null!;
 
+    /// <summary>Overrides the title (defaults to the entity's plural caption).</summary>
+    [Parameter] public string? Title { get; set; }
+
+    /// <summary>Shown inside another record's form: smaller, and returns there after opening or adding a row.</summary>
+    [Parameter] public bool Embedded { get; set; }
+
+    /// <summary>Fixed filters, e.g. the parent of a related list. Filtered properties are not shown as columns.</summary>
+    [Parameter] public IReadOnlyList<PropertyFilter> Filters { get; set; } = [];
+
+    /// <summary>Query parameters for the New page, e.g. ("Customer", "5") to pre-fill the parent.</summary>
+    [Parameter] public IReadOnlyList<(string Name, string? Value)> NewQuery { get; set; } = [];
+
+    private string? ReturnUrl => Embedded ? Navigation.ToBaseRelativePath(Navigation.Uri) : null;
+
+    private string NewUrl => StrataRoutes.WithQuery(StrataRoutes.New(Entity),
+        [.. NewQuery, (StrataRoutes.ReturnUrlParameter, ReturnUrl)]);
+
+    private string? _shownFor;
+
     protected override async Task OnParametersSetAsync()
     {
-        _columns = Entity.ListColumns.ToList();
+        // The parent form re-renders on every edit; only reset when the list actually shows something else.
+        var shownFor = Entity.Id + "|" + string.Join("|", Filters.Select(f => $"{f.PropertyName}={f.Value}"));
+        if (shownFor == _shownFor) return;
+        _shownFor = shownFor;
+
+        _columns = Entity.ListColumns.Where(c => !Filters.Any(f => f.PropertyName == c.Name)).ToList();
         _canCreate = Permissions.IsAllowed(Entity.ClrType, EntityOperation.Create);
         _canDelete = Permissions.IsAllowed(Entity.ClrType, EntityOperation.Delete);
         _selected = [];
@@ -106,6 +132,7 @@
                 Search = _search,
                 SortProperty = string.IsNullOrEmpty(state.SortLabel) || state.SortDirection == SortDirection.None ? null : state.SortLabel,
                 SortDescending = state.SortDirection == SortDirection.Descending,
+                Filters = Filters,
             }, cancellationToken);
             return new TableData<object> { Items = result.Items, TotalItems = result.TotalCount };
         }
@@ -124,7 +151,8 @@
 
     private void Open(object? item)
     {
-        if (item is not null) Navigation.NavigateTo(StrataRoutes.Detail(Entity, item));
+        if (item is not null)
+            Navigation.NavigateTo(StrataRoutes.WithQuery(StrataRoutes.Detail(Entity, item), (StrataRoutes.ReturnUrlParameter, ReturnUrl)));
     }
 
     private async Task DeleteSelectedAsync()

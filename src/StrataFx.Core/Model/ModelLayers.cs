@@ -91,6 +91,13 @@ public sealed class JsonModelLayer : IModelLayer
                 if (p.DisplayFormat is not null) prop.DisplayFormat = p.DisplayFormat;
                 if (p.Editor is not null) prop.EditorName = p.Editor;
                 if (p.Lines is { } lines) prop.Lines = lines;
+                if (p.CollectionKind is { } collectionKind)
+                {
+                    if (prop.EditorKind != EditorKind.Collection)
+                        throw new InvalidOperationException($"Model layer '{Name}': '{entityId}.{propName}' is not a collection.");
+                    prop.CollectionKind = collectionKind;
+                    if (collectionKind == CollectionKind.Owned) prop.ElementEntity!.VisibleInNavigation = false;
+                }
             }
         }
     }
@@ -125,5 +132,8 @@ public sealed class JsonModelLayer : IModelLayer
         public string? DisplayFormat { get; set; }
         public string? Editor { get; set; }
         public int? Lines { get; set; }
+
+        [JsonConverter(typeof(JsonStringEnumConverter<CollectionKind>))]
+        public CollectionKind? CollectionKind { get; set; }
     }
 }

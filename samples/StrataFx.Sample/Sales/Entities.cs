@@ -32,7 +32,8 @@ public class Customer
     [Multiline, Display(GroupName = "Notes")]
     public string? Notes { get; set; }
 
-    public List<Order> Orders { get; set; } = []; // collections are not shown yet
+    // Related: shown as a list of the customer's orders, each a separate record with its own page.
+    public List<Order> Orders { get; set; } = [];
 }
 
 public enum ProductCategory { Hardware, Software, Service, Subscription }
@@ -72,12 +73,6 @@ public class Order
     public Customer Customer { get; set; } = null!;
     public int CustomerId { get; set; }
 
-    public Product? Product { get; set; }
-    public int? ProductId { get; set; }
-
-    [Range(1, 10_000)]
-    public int Quantity { get; set; } = 1;
-
     [DataType(DataType.Date), Display(Name = "Order date")]
     public DateTime OrderDate { get; set; } = DateTime.Today;
 
@@ -86,9 +81,35 @@ public class Order
     [Display(Name = "Shipped on")]
     public DateTime? ShippedOn { get; set; }
 
-    [Range(0, 100_000_000), DisplayFormat(DataFormatString = "{0:N2}")]
+    // Calculated from the lines on every save (see OrderTotals), so it is read-only in the form.
+    [Editable(false), DisplayFormat(DataFormatString = "{0:N2}")]
     public decimal Total { get; set; }
 
     [Multiline(3), Display(GroupName = "Notes")]
     public string? Notes { get; set; }
+
+    // Owned: lines are edited in the order form and saved, added and deleted with the order.
+    [OwnedCollection]
+    public List<OrderLine> Lines { get; set; } = [];
+}
+
+/// <summary>Has no [StrataEntity] navigation: owned items are reached through their order.</summary>
+public class OrderLine
+{
+    public int Id { get; set; }
+
+    public Order Order { get; set; } = null!; // the parent; set automatically when the order is saved
+    public int OrderId { get; set; }
+
+    public Product Product { get; set; } = null!;
+    public int ProductId { get; set; }
+
+    [Range(1, 10_000)]
+    public int Quantity { get; set; } = 1;
+
+    [Range(0, 1_000_000), Display(Name = "Unit price"), DisplayFormat(DataFormatString = "{0:N2}")]
+    public decimal UnitPrice { get; set; }
+
+    [Display(Name = "Line total"), DisplayFormatString("N2")]
+    public decimal LineTotal => Quantity * UnitPrice; // get-only: shown, not stored
 }

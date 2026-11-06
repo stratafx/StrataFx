@@ -78,6 +78,12 @@ public sealed class StrataFxBuilder
         return this;
     }
 
+    public StrataFxBuilder AddSaveHandler<THandler>() where THandler : class, Data.IEntitySaveHandler
+    {
+        Services.AddScoped<Data.IEntitySaveHandler, THandler>();
+        return this;
+    }
+
     /// <summary>Switches from allow-all to role-based permissions.</summary>
     public StrataFxBuilder UsePermissionPolicy(Action<PermissionPolicy> configure)
     {
