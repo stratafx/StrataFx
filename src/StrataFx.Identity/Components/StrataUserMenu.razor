@@ -1,0 +1,27 @@
+@* The signed-in user's name and a Log out button, for the app bar. Log out is a plain form POST so the cookie is cleared. *@
+@using System.Security.Claims
+
+<AuthorizeView>
+    <Authorized>
+        <MudTooltip Text="@RolesText(context.User)">
+            <div class="d-flex align-center mx-2">
+                <MudIcon Icon="@Icons.Material.Outlined.AccountCircle" Size="Size.Small" Class="mr-1" />
+                <MudText Typo="Typo.body2">@context.User.Identity?.Name</MudText>
+            </div>
+        </MudTooltip>
+        <form method="post" action="@StrataIdentityRoutes.Logout" class="d-flex">
+            <AntiforgeryToken />
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Logout">Log out</MudButton>
+        </form>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private static string RolesText(ClaimsPrincipal user)
+    {
+        var roleType = (user.Identity as ClaimsIdentity)?.RoleClaimType ?? ClaimTypes.Role;
+        var roles = user.FindAll(roleType).Select(c => c.Value).ToList();
+        return roles.Count == 0 ? "No roles" : "Roles: " + string.Join(", ", roles);
+    }
+}

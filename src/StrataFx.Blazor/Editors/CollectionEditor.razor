@@ -3,6 +3,7 @@
 @inject PropertyEditorRegistry Editors
 @inject EntityChangeDispatcher ChangeDispatcher
 @inject ISnackbar Snackbar
+@inject IPermissionService Permissions
 
 @if (Property.CollectionKind == CollectionKind.Owned)
 {
@@ -63,6 +64,10 @@
 else if (Property.InverseReference is null)
 {
     @* A related list needs the item's reference back to the parent; without it there is nothing to filter on. *@
+}
+else if (!Permissions.IsAllowed(Element.ClrType, EntityOperation.Read))
+{
+    @* Related records the user may not read are left out of the form. *@
 }
 else if (Property.Owner.IsNew(Instance))
 {

@@ -1,5 +1,6 @@
-@* Buttons for the custom StrataCommands that apply to an entity in a list or detail view. *@
+@* Buttons for the custom StrataCommands that apply to an entity in a list or detail view and that the user may run. *@
 @inject IEnumerable<StrataCommand> AllCommands
+@inject IPermissionService Permissions
 @inject IDataStore Data
 @inject IServiceProvider Services
 @inject IDialogService Dialogs
@@ -29,10 +30,11 @@
     [Parameter] public EventCallback<CommandResult> Executed { get; set; }
 
     protected override void OnParametersSet() =>
-        _commands = AllCommands.Where(c => c.Target.HasFlag(Target) && c.AppliesTo(Entity)).ToList();
+        _commands = AllCommands.Available(Entity, Target, Permissions).ToList();
 
     private async Task RunAsync(StrataCommand command, CommandContext context)
     {
+        if (!Permissions.IsAllowed(command, Entity)) return; // hidden already; checked again in case the user changed
         if (command.ConfirmationMessage is { } question &&
             await Dialogs.ShowMessageBoxAsync(command.Caption, question, yesText: "Yes", cancelText: "Cancel") != true)
             return;

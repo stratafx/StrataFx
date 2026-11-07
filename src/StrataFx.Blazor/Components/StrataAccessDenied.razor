@@ -1,0 +1,19 @@
+@* Shown instead of a generated page when the user may not use it, e.g. after opening a bookmarked or shared link. *@
+
+<MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Outlined.Lock" Class="mb-4">
+    <MudText Typo="Typo.subtitle1">You don't have access</MudText>
+    <MudText Typo="Typo.body2">@Message Ask an administrator if you need it.</MudText>
+</MudAlert>
+<MudButton Href="" StartIcon="@Icons.Material.Filled.ArrowBack">Home</MudButton>
+
+@code {
+    [Parameter, EditorRequired] public EntityModel Entity { get; set; } = null!;
+
+    [Parameter] public EntityOperation Operation { get; set; } = EntityOperation.Read;
+
+    private string Message => Operation switch
+    {
+        EntityOperation.Create => $"You can't create {Entity.PluralCaption.ToLowerInvariant()}.",
+        _ => $"You can't view {Entity.PluralCaption.ToLowerInvariant()}.",
+    };
+}

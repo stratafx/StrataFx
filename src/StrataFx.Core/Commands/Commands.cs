@@ -1,5 +1,6 @@
 using StrataFx.Data;
 using StrataFx.Model;
+using StrataFx.Security;
 
 namespace StrataFx.Commands;
 
@@ -49,6 +50,12 @@ public abstract class StrataCommand
     public virtual CommandTarget Target => CommandTarget.Both;
     public virtual SelectionRequirement Selection => SelectionRequirement.Single;
 
+    /// <summary>
+    /// What the user must be allowed to do on the entity to see and run the command. Update by default, since most
+    /// commands change records; use Read for commands that only look (export, print), or Delete, or a combination.
+    /// </summary>
+    public virtual EntityOperation RequiredOperation => EntityOperation.Update;
+
     /// <summary>When set, the user is asked to confirm before the command runs.</summary>
     public virtual string? ConfirmationMessage => null;
 
@@ -63,6 +70,18 @@ public abstract class StrataCommand
     };
 
     public abstract Task<CommandResult> ExecuteAsync(CommandContext context, CancellationToken cancellationToken = default);
+}
+
+public static class StrataCommandExtensions
+{
+    /// <summary>The commands to show for an entity in a list or detail view: matching target and entity, and permitted.</summary>
+    public static IEnumerable<StrataCommand> Available(this IEnumerable<StrataCommand> commands,
+        EntityModel entity, CommandTarget target, IPermissionService permissions) =>
+        commands.Where(c => c.Target.HasFlag(target) && c.AppliesTo(entity) && permissions.IsAllowed(c, entity));
+
+    /// <summary>Whether the current user has the operations the command requires on the entity.</summary>
+    public static bool IsAllowed(this IPermissionService permissions, StrataCommand command, EntityModel entity) =>
+        permissions.IsAllowed(entity.ClrType, command.RequiredOperation);
 }
 
 /// <summary>A command for one entity type, with typed access to the selection.</summary>

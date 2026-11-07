@@ -1,0 +1,23 @@
+@page "/account/access-denied"
+@* Where the cookie handler sends signed-in users who request a page their roles do not allow. *@
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout StrataAccountLayout
+@inject AppModel Model
+
+<PageTitle>Access denied · @Model.Title</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+    <MudIcon Icon="@Icons.Material.Outlined.Lock" Color="Color.Warning" />
+    <MudText Typo="Typo.h5">Access denied</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="strata-account-muted mb-5">
+    You don't have permission to open this page. Ask an administrator if you need it, or sign in as someone else.
+</MudText>
+<MudStack Row="true" Spacing="2">
+    <MudButton Href="" Variant="Variant.Filled" Color="Color.Primary">Home</MudButton>
+    <form method="post" action="@StrataIdentityRoutes.Logout">
+        <AntiforgeryToken />
+        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Primary">Sign in as someone else</MudButton>
+    </form>
+</MudStack>

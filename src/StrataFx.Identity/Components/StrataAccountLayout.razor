@@ -1,0 +1,15 @@
+@* Layout of the sign-in pages: a centered card in the app's default theme. These pages render statically (no circuit). *@
+@inherits LayoutComponentBase
+@inject AppModel Model
+
+<StrataThemeProvider />
+
+<div class="strata-account">
+    <MudPaper Elevation="2" Class="strata-account-card">
+        <div class="strata-account-brand">
+            <MudIcon Icon="@Icons.Material.Outlined.Layers" Color="Color.Primary" />
+            <MudText Typo="Typo.subtitle1">@Model.Title</MudText>
+        </div>
+        @Body
+    </MudPaper>
+</div>

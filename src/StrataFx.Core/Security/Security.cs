@@ -1,3 +1,5 @@
+using System.Security.Claims;
+
 namespace StrataFx.Security;
 
 /// <summary>Operations that can be allowed or denied on an entity type.</summary>
@@ -27,6 +29,23 @@ public sealed class AnonymousUser : ICurrentUser
     public string? Name => null;
     public bool IsAuthenticated => false;
     public bool IsInRole(string role) => false;
+}
+
+/// <summary>
+/// A user read from a <see cref="ClaimsPrincipal"/>, so any ASP.NET Core authentication works: Identity cookies,
+/// Entra ID, OpenID Connect, JWT bearer tokens. Roles are the principal's role claims.
+/// </summary>
+public sealed class ClaimsPrincipalUser(ClaimsPrincipal principal) : ICurrentUser
+{
+    public static ClaimsPrincipalUser Anonymous { get; } = new(new ClaimsPrincipal(new ClaimsIdentity()));
+
+    public ClaimsPrincipal Principal { get; } = principal;
+    public string? Name => IsAuthenticated ? Principal.Identity?.Name : null;
+    public bool IsAuthenticated => Principal.Identity?.IsAuthenticated == true;
+
+    /// <summary>Ignores case, like the role names of a <see cref="PermissionPolicy"/> (ClaimsPrincipal.IsInRole does not).</summary>
+    public bool IsInRole(string role) => IsAuthenticated && Principal.Identities.Any(identity =>
+        identity.FindAll(identity.RoleClaimType).Any(c => string.Equals(c.Value, role, StringComparison.OrdinalIgnoreCase)));
 }
 
 /// <summary>Decides what the current user may do. Checked by the UI (to hide commands) and the data layer (to enforce).</summary>

@@ -1,0 +1,74 @@
+.strata-account {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    background: var(--mud-palette-background-gray);
+    color: var(--mud-palette-text-primary);
+}
+
+.strata-account ::deep .strata-account-card {
+    width: 100%;
+    max-width: 400px;
+    padding: 32px;
+}
+
+.strata-account-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+.strata-account ::deep .strata-account-muted {
+    color: var(--mud-palette-text-secondary);
+}
+
+.strata-account ::deep .strata-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 16px;
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.strata-account ::deep .strata-field input {
+    font: inherit;
+    font-size: 1rem;
+    color: var(--mud-palette-text-primary);
+    background: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-inputs);
+    border-radius: var(--mud-default-borderradius);
+    padding: 10px 12px;
+    outline: none;
+}
+
+.strata-account ::deep .strata-field input:focus {
+    border-color: var(--mud-palette-primary);
+    box-shadow: 0 0 0 1px var(--mud-palette-primary);
+}
+
+.strata-account ::deep .strata-field input.invalid {
+    border-color: var(--mud-palette-error);
+}
+
+.strata-account ::deep .validation-message {
+    color: var(--mud-palette-error);
+    font-size: 0.75rem;
+}
+
+.strata-account ::deep .strata-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    font-size: 0.875rem;
+}
+
+.strata-account ::deep .strata-check input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--mud-palette-primary);
+}

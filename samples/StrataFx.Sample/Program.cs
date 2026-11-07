@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using StrataFx.Blazor;
 using StrataFx.EFCore;
 using StrataFx.Hosting;
+using StrataFx.Identity;
 using StrataFx.Sample.Components;
 using StrataFx.Sample.Data;
 using StrataFx.Sample.Sales;
@@ -20,15 +22,21 @@ builder.Services.AddStrataFx(fx =>
     fx.AddJsonModelLayer(Path.Combine(builder.Environment.ContentRootPath, "model.json"));
     fx.UseEntityFrameworkCore<SampleDbContext>();
 
-    // Allow-all is the default. To try role-based security, uncomment this and register an ICurrentUser
-    // (e.g. one backed by ASP.NET Core Identity). SalesModule defines the SalesViewer and SalesManager roles.
-    // fx.UsePermissionPolicy(policy => policy.Role(PermissionPolicy.AnonymousRole).AllowAll(EntityOperation.Read));
+    // Users sign in with ASP.NET Core Identity; their roles decide what they can see and do.
+    // SalesModule defines the SalesViewer and SalesManager roles; Admin may do everything.
+    fx.UseAspNetCoreIdentity<IdentityUser>()
+        .AddEntityFrameworkStores<SampleDbContext>();
+    fx.UsePermissionPolicy(policy => policy.Role("Admin").AllowAll());
 });
 builder.Services.AddStrataFxBlazor();
 
 var app = builder.Build();
 
 await SampleDbContext.SeedAsync(app.Services);
+// Roles always; the test users (from appsettings.Development.json) only in development.
+await app.Services.SeedStrataIdentityAsync<IdentityUser>(app.Environment.IsDevelopment()
+    ? builder.Configuration.GetSection("TestUsers").Get<StrataSeedUser[]>()
+    : null);
 
 if (!app.Environment.IsDevelopment())
 {
@@ -40,9 +48,11 @@ app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 
-app.MapStaticAssets();
+// CSS and scripts are public, so the sign-in page can load them before anyone has signed in.
+app.MapStaticAssets().AllowAnonymous();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
-    .AddAdditionalAssemblies(StrataFxBlazorExtensions.PagesAssembly);
+    .AddAdditionalAssemblies(StrataFxBlazorExtensions.PagesAssembly, StrataFxIdentityExtensions.PagesAssembly);
+app.MapStrataFxIdentity();
 
 app.Run();

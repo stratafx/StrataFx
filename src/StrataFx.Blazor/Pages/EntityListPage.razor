@@ -1,10 +1,16 @@
 @page "/app/{EntityId}"
 @inject AppModel Model
+@inject IPermissionService Permissions
 
 @if (_entity is null)
 {
     <PageTitle>Not found</PageTitle>
     <MudAlert Severity="Severity.Warning">There is no page called "@EntityId".</MudAlert>
+}
+else if (!Permissions.IsAllowed(_entity.ClrType, EntityOperation.Read))
+{
+    <PageTitle>No access · @Model.Title</PageTitle>
+    <StrataAccessDenied Entity="_entity" />
 }
 else
 {

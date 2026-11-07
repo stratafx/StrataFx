@@ -1,0 +1,76 @@
+@page "/account/login"
+@* Static SSR: signing in writes the authentication cookie, which only an HTTP response can do (not a circuit). *@
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout StrataAccountLayout
+@inject IStrataSignInService SignIn
+@inject NavigationManager Navigation
+@inject AppModel Model
+
+<PageTitle>Sign in · @Model.Title</PageTitle>
+
+<MudText Typo="Typo.h5">Sign in</MudText>
+<MudText Typo="Typo.body2" Class="strata-account-muted mb-5">to continue to @Model.Title</MudText>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">@_error</MudAlert>
+}
+
+<EditForm Model="Input" method="post" FormName="strata-login" OnValidSubmit="SignInAsync">
+    <DataAnnotationsValidator />
+    <label class="strata-field">
+        <span>User name or e-mail</span>
+        <InputText @bind-Value="Input.UserName" autocomplete="username" autofocus aria-required="true" />
+        <ValidationMessage For="() => Input.UserName" />
+    </label>
+    <label class="strata-field">
+        <span>Password</span>
+        <InputText type="password" @bind-Value="Input.Password" autocomplete="current-password" aria-required="true" />
+        <ValidationMessage For="() => Input.Password" />
+    </label>
+    <label class="strata-check">
+        <InputCheckbox @bind-Value="Input.RememberMe" />
+        <span>Keep me signed in</span>
+    </label>
+    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large">
+        Sign in
+    </MudButton>
+</EditForm>
+
+@code {
+    private string? _error;
+
+    [SupplyParameterFromForm] private LoginInput Input { get; set; } = null!;
+
+    /// <summary>Where to go after signing in. Only app-relative paths are followed.</summary>
+    [SupplyParameterFromQuery(Name = StrataRoutes.ReturnUrlParameter)] private string? ReturnUrl { get; set; }
+
+    protected override void OnInitialized() => Input ??= new();
+
+    private async Task SignInAsync()
+    {
+        var result = await SignIn.PasswordSignInAsync(Input.UserName.Trim(), Input.Password, Input.RememberMe);
+        if (result.Succeeded)
+        {
+            Navigation.NavigateTo(StrataRoutes.SafeReturnUrl(ReturnUrl) ?? "");
+            return;
+        }
+
+        Input.Password = ""; // never send the password back in the page
+        _error = result.IsLockedOut ? "This account is locked after too many failed attempts. Try again later."
+            : result.IsNotAllowed ? "This account is not allowed to sign in yet."
+            : "The user name or password is incorrect.";
+    }
+
+    private sealed class LoginInput
+    {
+        [Required(ErrorMessage = "Enter your user name.")]
+        public string UserName { get; set; } = "";
+
+        [Required(ErrorMessage = "Enter your password.")]
+        public string Password { get; set; } = "";
+
+        public bool RememberMe { get; set; }
+    }
+}

@@ -1,11 +1,17 @@
 @page "/app/{EntityId}/new"
 @page "/app/{EntityId}/{Key}"
 @inject AppModel Model
+@inject IPermissionService Permissions
 
 @if (_entity is null)
 {
     <PageTitle>Not found</PageTitle>
     <MudAlert Severity="Severity.Warning">There is no page called "@EntityId".</MudAlert>
+}
+else if (!Permissions.IsAllowed(_entity.ClrType, RequiredOperation))
+{
+    <PageTitle>No access · @Model.Title</PageTitle>
+    <StrataAccessDenied Entity="_entity" Operation="RequiredOperation" />
 }
 else
 {
@@ -20,6 +26,9 @@ else
 
     /// <summary>Null on the /new route.</summary>
     [Parameter] public string? Key { get; set; }
+
+    /// <summary>Viewing needs Read; the New page needs Create. Saving changes is checked by the form and the store.</summary>
+    private EntityOperation RequiredOperation => Key is null ? EntityOperation.Create : EntityOperation.Read;
 
     protected override void OnParametersSet() => _entity = Model.FindEntity(EntityId);
 }

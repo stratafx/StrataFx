@@ -57,7 +57,8 @@ in your layout, and you get `/app/customer` (list) and `/app/customer/{id}` (det
 |---|---|
 | `StrataFx.Core` | Application model and builder, model layers, commands, modules, security, validation, `IDataStore`. No UI or ORM dependencies. |
 | `StrataFx.EFCore` | `IDataStore` on EF Core: paging, search, sorting, lookups, saves, with permission and validation enforcement. |
-| `StrataFx.Blazor` | MudBlazor UI: generated list and detail views, property editor registry, navigation menu, command bar. |
+| `StrataFx.Blazor` | MudBlazor UI: generated list and detail views, property editor registry, navigation menu, command bar, and an `ICurrentUser` read from Blazor's authentication state (works with any authentication). |
+| `StrataFx.Identity` | ASP.NET Core Identity: `fx.UseAspNetCoreIdentity<TUser>()`, sign-in, sign-out and access-denied pages, a user menu for the app bar, and a seeder for roles and users. |
 | `samples/StrataFx.Sample` | A sales app (customers, products, orders) with a module, commands, a rule and a JSON layer. |
 | `tests/StrataFx.Core.Tests` | Unit tests, including EF Core tests on in-memory SQLite. |
 
@@ -80,11 +81,42 @@ in your layout, and you get `/app/customer` (list) and `/app/customer/{id}` (det
   Register with `fx.AddChangeHandler<T>()`. Values handlers set don't raise further changes, and failures show a
   message without breaking the form. Keep values that must be right in a save handler too, since data can be saved
   without a form.
-- **Commands**: business operations shown as buttons (`StrataCommand<T>`), resolved from DI.
+- **Commands**: business operations shown as buttons (`StrataCommand<T>`), resolved from DI. A command is shown
+  only to users with its `RequiredOperation` on the entity (`Update` by default; override with `Read` for commands
+  that only look, such as export or print).
 - **Rules**: validation beyond data annotations (`IEntityRule`), enforced in the UI and the data store.
 - **Modules**: `StrataModule` bundles entities, model layers, commands, rules, save and change handlers, and permissions.
-- **Security**: allow-all by default; `fx.UsePermissionPolicy(...)` enables role-based type permissions,
-  checked in the UI and enforced by the data store.
+- **Security**: allow-all by default; `fx.UsePermissionPolicy(...)` enables role-based type permissions
+  (`policy.Role("Viewer").Allow<Customer>(EntityOperation.Read)`, `policy.Role("Admin").AllowAll()`). A user gets
+  the union of their roles' permissions. The UI hides what a user may not do: navigation entries, New, Delete, Save,
+  commands, related lists, and shows "You don't have access" for a list or detail link they can't open. The data store
+  enforces the same policy on every query, save and delete, so it holds even when code calls the store directly
+  (`StrataAccessDeniedException`).
+  - **Who the user is**: `ICurrentUser`. `fx.UseBlazorAuthenticationState()` (in `StrataFx.Blazor`) reads the user and
+    their role claims from Blazor's `AuthenticationStateProvider`, so it works with any ASP.NET Core authentication
+    (Identity, Entra ID, OpenID Connect). It does not use `HttpContext`, which interactive circuits don't have.
+  - **ASP.NET Core Identity** (`StrataFx.Identity`):
+
+    ```csharp
+    builder.Services.AddStrataFx(fx =>
+    {
+        // ...
+        fx.UseAspNetCoreIdentity<IdentityUser>().AddEntityFrameworkStores<AppDbContext>(); // AppDbContext : IdentityDbContext
+        fx.UsePermissionPolicy(policy => policy.Role("Admin").AllowAll());
+    });
+    // ...
+    await app.Services.SeedStrataIdentityAsync<IdentityUser>(users); // creates the policy's roles and the given users
+    app.MapStaticAssets().AllowAnonymous();
+    app.MapRazorComponents<App>()
+       .AddInteractiveServerRenderMode()
+       .AddAdditionalAssemblies(StrataFxBlazorExtensions.PagesAssembly, StrataFxIdentityExtensions.PagesAssembly);
+    app.MapStrataFxIdentity(); // sign-out endpoint
+    ```
+
+    Every page then needs a signed-in user (turn off with `RequireSignIn = false`). The sign-in page sets a cookie, so
+    it renders as static HTML: in `App.razor` use `HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null`
+    as the render mode of `<Routes>` and `<HeadOutlet>`. In `Routes.razor` use `AuthorizeRouteView` with
+    `<RedirectToLogin />` when not authorized, and put `<StrataUserMenu />` (name and Log out) in the app bar.
 - **Editors**: replace or add property editors with `AddStrataFxBlazor(e => e.Register<MyEditor>("name"))`
   and pick them with `[PropertyEditor("name")]`.
 - **Themes**: slim built-in themes (Fluent slim by default, plus Graphite, Indigo slate, Nordic and Zinc emerald),
@@ -100,12 +132,24 @@ in your layout, and you get `/app/customer` (list) and `/app/customer/{id}` (det
 dotnet run --project samples/StrataFx.Sample
 ```
 
+Open http://localhost:5037 and sign in with one of the test users. They are created only in the Development
+environment, from `TestUsers` in `samples/StrataFx.Sample/appsettings.Development.json`:
+
+| User | Password | Role | Can |
+|---|---|---|---|
+| `admin` | `Admin#2026` | Admin | everything |
+| `manager` | `Manager#2026` | SalesManager | everything (the role is defined in `SalesModule`) |
+| `viewer` | `Viewer#2026` | SalesViewer | read customers, products and orders; no New, Save, Delete, Ship or Mark as VIP |
+
+The database (`strata-sample.db`) is created and seeded on first start; delete it to start over.
+
 ## Roadmap
 
 - Per-user model layer stored in the database
 - Row-level and field-level permissions
 - Audit trail, multi-tenancy, reports, dashboards
-- ASP.NET Core Identity integration
+- User and role management pages; external sign-in (Entra ID, Google) on the Identity sign-in page
+- ~~ASP.NET Core Identity integration~~ (done: `StrataFx.Identity`)
 
 ## License
 

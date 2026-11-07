@@ -1,5 +1,6 @@
 ﻿@page "/"
 @inject AppModel Model
+@inject IPermissionService Permissions
 
 <PageTitle>@Model.Title</PageTitle>
 
@@ -10,7 +11,9 @@
 </MudText>
 
 <MudGrid>
-    @foreach (var entity in Model.Entities.Where(e => e.VisibleInNavigation).OrderBy(e => e.NavigationGroup).ThenBy(e => e.Order))
+    @foreach (var entity in Model.Entities
+                 .Where(e => e.VisibleInNavigation && Permissions.IsAllowed(e.ClrType, EntityOperation.Read))
+                 .OrderBy(e => e.NavigationGroup).ThenBy(e => e.Order))
     {
         <MudItem xs="12" sm="6" md="4">
             <MudCard Elevation="1">
@@ -25,7 +28,10 @@
                 </MudCardContent>
                 <MudCardActions>
                     <MudButton Href="@StrataRoutes.List(entity)" Color="Color.Primary">Open</MudButton>
-                    <MudButton Href="@StrataRoutes.New(entity)">New</MudButton>
+                    @if (Permissions.IsAllowed(entity.ClrType, EntityOperation.Create))
+                    {
+                        <MudButton Href="@StrataRoutes.New(entity)">New</MudButton>
+                    }
                 </MudCardActions>
             </MudCard>
         </MudItem>

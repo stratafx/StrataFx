@@ -1,9 +1,12 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using StrataFx.Sample.Sales;
 
 namespace StrataFx.Sample.Data;
 
-public sealed class SampleDbContext(DbContextOptions<SampleDbContext> options) : DbContext(options)
+/// <summary>Business data and the ASP.NET Core Identity tables (users, roles) in one database.</summary>
+public sealed class SampleDbContext(DbContextOptions<SampleDbContext> options) : IdentityDbContext<IdentityUser>(options)
 {
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Product> Products => Set<Product>();
@@ -16,6 +19,7 @@ public sealed class SampleDbContext(DbContextOptions<SampleDbContext> options) :
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder); // Identity tables
         modelBuilder.Entity<Order>().HasIndex(o => o.Number).IsUnique();
         modelBuilder.Entity<Product>().HasIndex(p => p.Sku).IsUnique();
         modelBuilder.Entity<Order>().HasOne(o => o.Customer).WithMany(c => c.Orders).OnDelete(DeleteBehavior.Cascade);

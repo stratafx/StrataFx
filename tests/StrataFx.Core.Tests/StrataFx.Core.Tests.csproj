@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\StrataFx.Core\StrataFx.Core.csproj" />
     <ProjectReference Include="..\..\src\StrataFx.EFCore\StrataFx.EFCore.csproj" />
+    <ProjectReference Include="..\..\src\StrataFx.Blazor\StrataFx.Blazor.csproj" />
   </ItemGroup>
 
 </Project>
