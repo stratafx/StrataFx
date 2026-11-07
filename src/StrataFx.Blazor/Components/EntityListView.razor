@@ -381,7 +381,9 @@
         _default = Resolve(null);
         _savePending = true; // keeps the current columns as this user's own, unless they match the model
         await SaveNowAsync();
-        Snackbar.Add("The default for everyone is cleared; lists show the model's columns again.", Severity.Info);
+        Snackbar.Add(_layout?.SameAs(_default) == false
+            ? "The default for everyone is cleared. You keep these columns; others get the model's columns."
+            : "The default for everyone is cleared; everyone gets the model's columns.", Severity.Info);
     }
 
     // ---- saving: debounced, so a burst of changes is one write ----
