@@ -158,10 +158,9 @@
     private async Task DeleteSelectedAsync()
     {
         var count = _selected.Count;
-        var confirmed = await Dialogs.ShowMessageBoxAsync(
-            "Delete",
-            count == 1 ? $"Delete this {Entity.Caption.ToLowerInvariant()}?" : $"Delete {count} {Entity.PluralCaption.ToLowerInvariant()}?",
-            yesText: "Delete", cancelText: "Cancel");
+        var impact = await ErrorText.DeleteImpactAsync(Data, Entity, _selected.ToList());
+        var question = count == 1 ? $"Delete this {Entity.Caption.ToLowerInvariant()}?" : $"Delete {count} {Entity.PluralCaption.ToLowerInvariant()}?";
+        var confirmed = await Dialogs.ShowMessageBoxAsync("Delete", $"{question} {impact}".TrimEnd(), yesText: "Delete", cancelText: "Cancel");
         if (confirmed != true) return;
 
         try

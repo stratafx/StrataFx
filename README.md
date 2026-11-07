@@ -85,6 +85,13 @@ in your layout, and you get `/app/customer` (list) and `/app/customer/{id}` (det
   only to users with its `RequiredOperation` on the entity (`Update` by default; override with `Read` for commands
   that only look, such as export or print).
 - **Rules**: validation beyond data annotations (`IEntityRule`), enforced in the UI and the data store.
+- **Database constraints**: the EF Core store reads unique indexes and foreign keys from the EF model and checks them
+  before saving, so users see messages built from captions instead of database errors: "Order # SO-1002 is already
+  used." next to the field (owned items too, including two items in the same save), and "This product is used on
+  12 order lines and can't be deleted." for a delete blocked by `Restrict`/`NoAction` references. The checks are
+  plain queries, so they work the same on every provider; if another user wins a race, the database error is
+  explained the same way. The delete confirmation says what a cascade removes ("This will also delete 3 orders and
+  their lines.", `IDataStore.GetDeleteImpactAsync`).
 - **Modules**: `StrataModule` bundles entities, model layers, commands, rules, save and change handlers, and permissions.
 - **Security**: allow-all by default; `fx.UsePermissionPolicy(...)` enables role-based type permissions
   (`policy.Role("Viewer").Allow<Customer>(EntityOperation.Read)`, `policy.Role("Admin").AllowAll()`). A user gets

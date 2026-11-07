@@ -1,3 +1,5 @@
+using StrataFx.Data;
+using StrataFx.Model;
 using StrataFx.Security;
 using StrataFx.Validation;
 
@@ -12,4 +14,20 @@ public static class ErrorText
         StrataValidationException invalid => string.Join(" ", invalid.Errors.Select(e => e.Message)),
         _ => "Something went wrong. Please try again.",
     };
+
+    /// <summary>
+    /// What else a delete removes ("This will also delete 3 orders and their lines."), for the confirmation.
+    /// Empty when nothing else is deleted or it cannot be found out: the confirmation still works without it.
+    /// </summary>
+    public static async Task<string> DeleteImpactAsync(IDataStore data, EntityModel entity, IReadOnlyList<object> instances)
+    {
+        try
+        {
+            return await data.GetDeleteImpactAsync(entity, instances) ?? "";
+        }
+        catch (Exception)
+        {
+            return "";
+        }
+    }
 }

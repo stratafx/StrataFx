@@ -14,12 +14,16 @@ namespace StrataFx.EFCore;
 /// <see cref="IDataStore"/> on EF Core. Each operation uses its own short-lived DbContext from
 /// <see cref="IDbContextFactory{TContext}"/>, which is the recommended pattern for Blazor Server.
 /// Permissions and validation are enforced here, so they hold no matter which UI calls the store.
+/// Unique indexes and blocked deletes are checked before saving, so users see "Order # SO-1002 is already used."
+/// instead of a database error.
 /// </summary>
+/// <param name="model">Captions for records that block a delete (e.g. "12 order lines"). Optional: type names are used without it.</param>
 public sealed class EfDataStore<TContext>(
     IDbContextFactory<TContext> contextFactory,
     IPermissionService permissions,
     EntityValidator validator,
-    IEnumerable<IEntitySaveHandler> saveHandlers) : IDataStore
+    IEnumerable<IEntitySaveHandler> saveHandlers,
+    AppModel? model = null) : IDataStore
     where TContext : DbContext
 {
     public EfDataStore(IDbContextFactory<TContext> contextFactory, IPermissionService permissions, EntityValidator validator)
@@ -60,7 +64,17 @@ public sealed class EfDataStore<TContext>(
         validator.ThrowIfInvalid(entity, instance);
 
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await new EfGraphSaver(db).SaveAsync(entity, instance, isNew, cancellationToken);
+        ThrowIfAny(await new EfConstraintChecker(db, model).FindDuplicatesAsync(entity, instance, isNew, includeFiltered: false, cancellationToken));
+        try
+        {
+            await new EfGraphSaver(db).SaveAsync(entity, instance, isNew, cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException)
+        {
+            // Someone may have saved the same value between the check and the save.
+            ThrowIfAny(await ExplainSaveFailureAsync(entity, instance, isNew, cancellationToken));
+            throw;
+        }
     }
 
     public async Task DeleteAsync(EntityModel entity, IEnumerable<object> instances, CancellationToken cancellationToken = default)
@@ -68,12 +82,50 @@ public sealed class EfDataStore<TContext>(
         permissions.Demand(entity.ClrType, EntityOperation.Delete);
 
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var tracked = new List<object>();
         foreach (var instance in instances)
         {
-            var tracked = await db.FindAsync(entity.ClrType, [entity.GetKey(instance)], cancellationToken);
-            if (tracked is not null) db.Remove(tracked);
+            if (await db.FindAsync(entity.ClrType, [entity.GetKey(instance)], cancellationToken) is { } found) tracked.Add(found);
         }
-        await db.SaveChangesAsync(cancellationToken);
+        ThrowIfAny(await new EfConstraintChecker(db, model).FindBlockedDeletesAsync(entity, tracked, cancellationToken));
+
+        db.RemoveRange(tracked);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException)
+        {
+            // A record may have started using one of these between the check and the delete.
+            ThrowIfAny(await ExplainDeleteFailureAsync(entity, tracked, cancellationToken));
+            throw;
+        }
+    }
+
+    public async Task<string?> GetDeleteImpactAsync(EntityModel entity, IReadOnlyList<object> instances, CancellationToken cancellationToken = default)
+    {
+        permissions.Demand(entity.ClrType, EntityOperation.Delete);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await new EfConstraintChecker(db, model).DescribeCascadeAsync(entity, instances, cancellationToken);
+    }
+
+    // ---- constraint failures the checks did not see coming (races). Anything else keeps its generic message. ----
+
+    private static void ThrowIfAny(List<ValidationError> errors)
+    {
+        if (errors.Count > 0) throw new StrataValidationException(errors);
+    }
+
+    private async Task<List<ValidationError>> ExplainSaveFailureAsync(EntityModel entity, object instance, bool isNew, CancellationToken ct)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        return await new EfConstraintChecker(db, model).FindDuplicatesAsync(entity, instance, isNew, includeFiltered: true, ct);
+    }
+
+    private async Task<List<ValidationError>> ExplainDeleteFailureAsync(EntityModel entity, List<object> instances, CancellationToken ct)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        return await new EfConstraintChecker(db, model).FindBlockedDeletesAsync(entity, instances, ct);
     }
 
     // ---- generic implementations, invoked with the entity's CLR type ----

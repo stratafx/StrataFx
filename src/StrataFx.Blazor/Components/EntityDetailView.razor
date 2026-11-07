@@ -235,7 +235,8 @@ else
     private async Task DeleteAsync()
     {
         if (_instance is null) return;
-        var confirmed = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete this {Entity.Caption.ToLowerInvariant()}?", yesText: "Delete", cancelText: "Cancel");
+        var impact = await ErrorText.DeleteImpactAsync(Data, Entity, [_instance]);
+        var confirmed = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete this {Entity.Caption.ToLowerInvariant()}? {impact}".TrimEnd(), yesText: "Delete", cancelText: "Cancel");
         if (confirmed != true) return;
 
         _busy = true;

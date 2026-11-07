@@ -20,6 +20,10 @@ public sealed class CrmContext(DbContextOptions<CrmContext> options) : DbContext
         modelBuilder.Entity<Contact>().HasOne(c => c.Company).WithMany(c => c.Contacts).HasForeignKey(c => c.CompanyId);
         modelBuilder.Entity<Contact>().HasOne(c => c.Referrer).WithMany().HasForeignKey(c => c.ReferrerId);
         modelBuilder.Entity<Contact>().Ignore(c => c.Computed);
+        modelBuilder.Entity<Contact>().HasIndex(c => new { c.CompanyId, c.FullName }).IsUnique();
+        modelBuilder.Entity<Invoice>().HasIndex(i => i.Number).IsUnique();
+        modelBuilder.Entity<InvoiceLine>().HasIndex(l => new { l.InvoiceId, l.Description }).IsUnique();
+        modelBuilder.Entity<InvoiceLine>().HasOne(l => l.Supplier).WithMany().OnDelete(DeleteBehavior.Restrict);
     }
 }
 

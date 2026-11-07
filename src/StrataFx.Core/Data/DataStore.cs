@@ -57,5 +57,16 @@ public interface IDataStore
     /// </summary>
     Task SaveAsync(EntityModel entity, object instance, bool isNew, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Deletes the instances, all or none. Throws <see cref="Validation.StrataValidationException"/> when other
+    /// records still use one of them, e.g. "This product is used on 12 order lines and can't be deleted."
+    /// </summary>
     Task DeleteAsync(EntityModel entity, IEnumerable<object> instances, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What else a delete removes, for the confirmation, e.g. "This will also delete 3 orders and their lines."
+    /// Null when nothing else is deleted or the store cannot tell.
+    /// </summary>
+    Task<string?> GetDeleteImpactAsync(EntityModel entity, IReadOnlyList<object> instances, CancellationToken cancellationToken = default) =>
+        Task.FromResult<string?>(null);
 }
