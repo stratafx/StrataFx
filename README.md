@@ -16,7 +16,10 @@ The application model is built in layers (strata), and each one can override the
 1. **Code**: entity classes and attributes (`[StrataEntity]`, `[Required]`, `[Display]`, ...)
 2. **Modules**: code layers that ship with a feature (`DelegateModelLayer`)
 3. **JSON**: deployment or admin overrides (`model.json`), no recompile needed
-4. *(planned)* **User**: per-user customizations saved in the database
+4. **User**: each signed-in user's own list layouts (columns, order, widths, sort, page size), saved in the database
+
+The user stratum never changes the shared model: it is applied when a view is built, so every user sees the
+lower layers plus their own choices.
 
 ## Quick start
 
@@ -56,7 +59,7 @@ in your layout, and you get `/app/customer` (list) and `/app/customer/{id}` (det
 | Project | What it contains |
 |---|---|
 | `StrataFx.Core` | Application model and builder, model layers, commands, modules, security, validation, `IDataStore`. No UI or ORM dependencies. |
-| `StrataFx.EFCore` | `IDataStore` on EF Core: paging, search, sorting, lookups, saves, with permission and validation enforcement. |
+| `StrataFx.EFCore` | `IDataStore` on EF Core: paging, search, sorting, lookups, saves, with permission and validation enforcement. Optional per-user settings store. |
 | `StrataFx.Blazor` | MudBlazor UI: generated list and detail views, property editor registry, navigation menu, command bar, and an `ICurrentUser` read from Blazor's authentication state (works with any authentication). |
 | `StrataFx.Identity` | ASP.NET Core Identity: `fx.UseAspNetCoreIdentity<TUser>()`, sign-in, sign-out and access-denied pages, a user menu for the app bar, and a seeder for roles and users. |
 | `samples/StrataFx.Sample` | A sales app (customers, products, orders) with a module, commands, a rule and a JSON layer. |
@@ -124,6 +127,31 @@ in your layout, and you get `/app/customer` (list) and `/app/customer/{id}` (det
     it renders as static HTML: in `App.razor` use `HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null`
     as the render mode of `<Routes>` and `<HeadOutlet>`. In `Routes.razor` use `AuthorizeRouteView` with
     `<RedirectToLogin />` when not authorized, and put `<StrataUserMenu />` (name and Log out) in the app bar.
+- **User layouts** (the user stratum): the columns button in a list's toolbar lets each user show or hide columns
+  and reorder them (drag, or the arrows); dragging a column header's right edge resizes it (double-click for
+  automatic width). The sort and page size are remembered too, and **Reset to default** drops the user's layout.
+  - Users choose from the properties that can be shown in a list (not keys, foreign keys, collections or multi-line
+    text); `visibleInList` in code or model.json only sets the default.
+  - Layouts are merged with the model when the list opens: removed or renamed properties are ignored, and properties
+    added later appear where the model puts them, so model changes never break saved layouts. A layout that matches
+    the default is not stored, so later model changes reach that user too.
+  - A related list inside a form ("Customer → Order history") has its own layout, separate from the full list.
+  - Saved per user name and key (`list/customer`, `list/customer.Orders`) through `IUserSettingsStore`. To keep
+    them in your database:
+
+    ```csharp
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.AddStrataUserSettings(); // StrataUserSetting table, unique on UserName + Key
+    }
+    // in AddStrataFx:
+    fx.AddEntityFrameworkCoreUserSettings<AppDbContext>();
+    ```
+
+    Without it, layouts are kept in memory until the app restarts. Users who are not signed in get layouts for their
+    session only, never shared with other visitors.
+  - Users in the `Admin` role also get **Save as default for everyone**, a shared layer between model.json and each
+    user's own layout (change the role with `fx.UserSettings.SharedDefaultsRole`, or set it to `null` to turn it off).
 - **Editors**: replace or add property editors with `AddStrataFxBlazor(e => e.Register<MyEditor>("name"))`
   and pick them with `[PropertyEditor("name")]`.
 - **Themes**: slim built-in themes (Fluent slim by default, plus Graphite, Indigo slate, Nordic and Zinc emerald),
@@ -148,15 +176,18 @@ environment, from `TestUsers` in `samples/StrataFx.Sample/appsettings.Developmen
 | `manager` | `Manager#2026` | SalesManager | everything (the role is defined in `SalesModule`) |
 | `viewer` | `Viewer#2026` | SalesViewer | read customers, products and orders; no New, Save, Delete, Ship or Mark as VIP |
 
-The database (`strata-sample.db`) is created and seeded on first start; delete it to start over.
+The database (`strata-sample.db`) is created and seeded on first start; delete it to start over (and after
+upgrading, when the schema changed). Try the columns button on a list as `manager`, then sign in as `viewer`: each
+user keeps their own layout.
 
 ## Roadmap
 
-- Per-user model layer stored in the database
+- More of the user stratum: saved filters and searches, detail form layouts
 - Row-level and field-level permissions
 - Audit trail, multi-tenancy, reports, dashboards
 - User and role management pages; external sign-in (Entra ID, Google) on the Identity sign-in page
 - ~~ASP.NET Core Identity integration~~ (done: `StrataFx.Identity`)
+- ~~Per-user model layer stored in the database~~ (done: user list layouts)
 
 ## License
 

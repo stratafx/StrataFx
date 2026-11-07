@@ -5,6 +5,7 @@ using StrataFx.Changes;
 using StrataFx.Commands;
 using StrataFx.Model;
 using StrataFx.Security;
+using StrataFx.Settings;
 using StrataFx.Validation;
 
 namespace StrataFx.Hosting;
@@ -36,6 +37,9 @@ public sealed class StrataFxBuilder
     public IServiceCollection Services { get; }
     public AppModelBuilder Model { get; } = new();
     public IReadOnlyList<StrataModule> Modules => _modules;
+
+    /// <summary>Options for per-user settings such as list layouts.</summary>
+    public UserSettingsOptions UserSettings { get; } = new();
 
     public string Title
     {
@@ -111,6 +115,9 @@ public sealed class StrataFxBuilder
         Services.TryAddScoped<ICurrentUser, AnonymousUser>();
         Services.AddScoped<EntityValidator>();
         Services.AddScoped<EntityChangeDispatcher>();
+        Services.TryAddSingleton<IUserSettingsStore, InMemoryUserSettingsStore>();
+        Services.AddSingleton(UserSettings);
+        Services.AddScoped<UserSettings>();
 
         if (_policy is not null)
         {

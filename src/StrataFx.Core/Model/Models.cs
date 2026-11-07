@@ -188,6 +188,9 @@ public sealed class PropertyModel
 
     public bool IsKey => ReferenceEquals(Owner.Key, this);
 
+    /// <summary>True for a foreign-key scalar behind a reference (e.g. CustomerId for Customer). Hidden; the reference editor sets it.</summary>
+    public bool IsForeignKey { get; internal set; }
+
     // ---- collection helpers (work with List<T>, ICollection<T> and other IList implementations) ----
 
     public IReadOnlyList<object> GetItems(object instance) =>

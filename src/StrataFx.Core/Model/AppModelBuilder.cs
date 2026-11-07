@@ -143,6 +143,7 @@ public sealed class AppModelBuilder
             }
             if (foreignKeys.Contains(info.Name))
             {
+                prop.IsForeignKey = true;
                 prop.VisibleInList = false;
                 prop.VisibleInDetail = false;
             }

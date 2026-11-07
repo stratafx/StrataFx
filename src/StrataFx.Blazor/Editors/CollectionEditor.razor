@@ -81,7 +81,8 @@ else
                     Title="@Property.Caption"
                     Embedded="true"
                     Filters="@([new PropertyFilter(Property.InverseReference.Name, Property.Owner.GetKey(Instance))])"
-                    NewQuery="@([(Property.InverseReference.Name, parentKey)])" />
+                    NewQuery="@([(Property.InverseReference.Name, parentKey)])"
+                    ViewKey="@ListLayouts.ViewKey(Element, Property)" />
 }
 
 @code {

@@ -67,3 +67,122 @@
 .strata-detail .mud-simple-table td .mud-input-control {
     margin: 0;
 }
+
+/* List views: resizable columns (strata-columns.js) and the column chooser. */
+
+.strata-list .mud-table-head th {
+    position: relative;
+}
+
+.strata-col-resizer {
+    position: absolute;
+    top: 0;
+    right: -4px;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 1;
+    touch-action: none;
+}
+
+/* The last column's handle stays inside the table, so it doesn't add a horizontal scrollbar. */
+.strata-list .mud-table-head th:last-child .strata-col-resizer {
+    right: 0;
+}
+
+.strata-col-resizer::after {
+    content: "";
+    position: absolute;
+    top: 25%;
+    bottom: 25%;
+    left: 3px;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--mud-palette-lines-default);
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.strata-list .mud-table-head th:hover .strata-col-resizer::after,
+.strata-resizing .strata-col-resizer::after {
+    opacity: 1;
+}
+
+.strata-resizing,
+.strata-resizing * {
+    cursor: col-resize !important;
+    user-select: none;
+}
+
+/* Once a user sets widths, the table uses them exactly and long values end with an ellipsis. */
+.strata-list-sized table {
+    table-layout: fixed;
+}
+
+.strata-list-sized .mud-table-cell {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.strata-list col.strata-col-check {
+    width: 52px;
+}
+
+.strata-column-chooser {
+    width: 300px;
+    padding: 4px 0;
+}
+
+.strata-column-chooser-header {
+    padding: 8px 16px 4px;
+}
+
+.strata-column-list {
+    max-height: 360px;
+    overflow-y: auto;
+    padding: 0 4px;
+}
+
+.strata-column-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 4px 0 2px;
+    border-radius: var(--mud-default-borderradius);
+    border-top: 2px solid transparent;
+}
+
+.strata-column-row:hover {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.strata-column-row.strata-drop-target {
+    border-top-color: var(--mud-palette-primary);
+}
+
+.strata-column-row.strata-dragging {
+    opacity: 0.4;
+}
+
+.strata-column-row .strata-drag-handle {
+    cursor: grab;
+    color: var(--mud-palette-text-disabled);
+}
+
+.strata-column-row .strata-column-caption {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.strata-column-row .strata-column-move {
+    visibility: hidden;
+}
+
+.strata-column-row:hover .strata-column-move,
+.strata-column-row:focus-within .strata-column-move {
+    visibility: visible;
+}

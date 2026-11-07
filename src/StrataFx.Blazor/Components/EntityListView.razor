@@ -1,89 +1,182 @@
-@* Generated list view: a paged, sortable, searchable table for any entity in the application model. *@
+@* Generated list view: a paged, sortable, searchable table for any entity in the application model.
+   Each user can choose, order and resize its columns and keep their sort and page size (the user stratum). *@
+@implements IAsyncDisposable
 @inject IDataStore Data
 @inject IPermissionService Permissions
 @inject NavigationManager Navigation
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
+@inject UserSettings Settings
+@inject IJSRuntime JS
 
-<MudTable @ref="_table"
-          T="object"
-          ServerData="LoadAsync"
-          MultiSelection="@_canDelete"
-          @bind-SelectedItems="_selected"
-          OnRowClick="@((TableRowClickEventArgs<object> e) => Open(e.Item))"
-          Hover="true"
-          Dense="true"
-          RowsPerPage="@(Embedded ? 10 : 25)"
-          Elevation="@(Embedded ? 0 : 1)"
-          Outlined="@Embedded"
-          RowStyle="cursor: pointer">
-    <ToolBarContent>
-        <MudText Typo="@(Embedded ? Typo.subtitle1 : Typo.h6)">@(Title ?? Entity.PluralCaption)</MudText>
-        <MudSpacer />
-        <MudTextField T="string"
-                      Value="_search"
-                      ValueChanged="OnSearchAsync"
-                      DebounceInterval="300"
-                      Placeholder="Search"
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Search"
-                      Clearable="true"
-                      Class="mt-0 mr-4"
-                      Style="max-width: 280px" />
-        <CommandBar Entity="Entity" Target="CommandTarget.List" Selection="@_selected.ToList()" Executed="OnCommandExecutedAsync" />
-        @if (_canDelete && _selected.Count > 0)
-        {
-            <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteSelectedAsync">
-                Delete (@_selected.Count)
-            </MudButton>
-        }
-        @if (_canCreate)
-        {
-            <MudButton Variant="@(Embedded ? Variant.Outlined : Variant.Filled)" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                       Size="@(Embedded ? Size.Small : Size.Medium)"
-                       Href="@NewUrl" Class="ml-2">
-                New
-            </MudButton>
-        }
-    </ToolBarContent>
-    <HeaderContent>
-        @foreach (var column in _columns)
-        {
-            <MudTh><MudTableSortLabel T="object" SortLabel="@column.Name">@column.Caption</MudTableSortLabel></MudTh>
-        }
-    </HeaderContent>
-    <RowTemplate>
-        @foreach (var column in _columns)
-        {
-            <MudTd DataLabel="@column.Caption" Style="@(IsNumeric(column) ? "text-align: right" : null)">
-                @if (column.EditorKind == EditorKind.Boolean)
-                {
-                    @if (column.GetValue(context) is true)
+<div @ref="_root" class="@RootClass">
+@if (_layout is not null)
+{
+    <MudTable @key="_tableVersion"
+              @ref="_table"
+              T="object"
+              ServerData="LoadAsync"
+              MultiSelection="@_canDelete"
+              @bind-SelectedItems="_selected"
+              OnRowClick="@((TableRowClickEventArgs<object> e) => Open(e.Item))"
+              Hover="true"
+              Dense="true"
+              RowsPerPage="@_layout.PageSize"
+              Elevation="@(Embedded ? 0 : 1)"
+              Outlined="@Embedded"
+              RowStyle="cursor: pointer">
+        <ToolBarContent>
+            <MudText Typo="@(Embedded ? Typo.subtitle1 : Typo.h6)">@(Title ?? Entity.PluralCaption)</MudText>
+            <MudSpacer />
+            <MudTextField T="string"
+                          Value="_search"
+                          ValueChanged="OnSearchAsync"
+                          DebounceInterval="300"
+                          Placeholder="Search"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Clearable="true"
+                          Class="mt-0 mr-2"
+                          Style="max-width: 280px" />
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" @bind-Open="_chooserOpen" Class="mr-2">
+                <ActivatorContent>
+                    <MudTooltip Text="Columns">
+                        <MudIconButton Icon="@Icons.Material.Outlined.ViewColumn" Size="Size.Medium" aria-label="Choose columns" OnClick="@context.ToggleAsync" />
+                    </MudTooltip>
+                </ActivatorContent>
+                <ChildContent>
+                    <div class="strata-column-chooser" @onclick:stopPropagation="true">
+                        <div class="strata-column-chooser-header">
+                            <MudText Typo="Typo.subtitle2">Columns</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @(Settings.IsPersistent ? "Drag to reorder. Saved for you." : "Drag to reorder. Kept for this session.")
+                            </MudText>
+                        </div>
+                        <div class="strata-column-list">
+                            @for (var i = 0; i < _layout.Columns.Count; i++)
+                            {
+                                var index = i;
+                                var column = _layout.Columns[i];
+                                <div @key="column.Name"
+                                     class="@ColumnRowClass(column)"
+                                     draggable="true"
+                                     @ondragstart="() => _dragging = column"
+                                     @ondragenter="() => _dropTarget = column"
+                                     @ondragover:preventDefault="true"
+                                     @ondrop="() => DropAsync(column)"
+                                     @ondragend="() => { _dragging = null; _dropTarget = null; }">
+                                    <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small" Class="strata-drag-handle" />
+                                    <MudCheckBox T="bool" Value="column.Visible" ValueChanged="v => SetVisibleAsync(column, v)" Dense="true" Size="Size.Small"
+                                                 Disabled="@(column.Visible && VisibleCount == 1)" aria-label="@($"Show {column.Property.Caption}")" />
+                                    <span class="strata-column-caption">@column.Property.Caption</span>
+                                    <MudIconButton Class="strata-column-move" Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small"
+                                                   Disabled="@(index == 0)" aria-label="@($"Move {column.Property.Caption} up")" OnClick="() => MoveAsync(index, index - 1)" />
+                                    <MudIconButton Class="strata-column-move" Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small"
+                                                   Disabled="@(index == _layout.Columns.Count - 1)" aria-label="@($"Move {column.Property.Caption} down")" OnClick="() => MoveAsync(index, index + 1)" />
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <MudDivider Class="my-1" />
+                    <MudMenuItem Icon="@Icons.Material.Filled.RestartAlt" OnClick="ResetAsync" Disabled="@IsDefault">Reset to default</MudMenuItem>
+                    @if (Settings.CanEditSharedDefaults)
                     {
-                        <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                        <MudMenuItem Icon="@Icons.Material.Outlined.Groups" OnClick="SaveForEveryoneAsync">Save as default for everyone</MudMenuItem>
+                        @if (_hasSharedDefault)
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Outlined.LayersClear" OnClick="ClearForEveryoneAsync">Clear default for everyone</MudMenuItem>
+                        }
                     }
-                }
-                else
-                {
-                    @column.FormatValue(column.GetValue(context))
-                }
-            </MudTd>
-        }
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText>@(string.IsNullOrEmpty(_search) ? $"No {Entity.PluralCaption.ToLowerInvariant()} yet." : "No matching records.")</MudText>
-    </NoRecordsContent>
-    <PagerContent>
-        <MudTablePager PageSizeOptions="new[] { 10, 25, 50, 100 }" />
-    </PagerContent>
-</MudTable>
+                </ChildContent>
+            </MudMenu>
+            <CommandBar Entity="Entity" Target="CommandTarget.List" Selection="@_selected.ToList()" Executed="OnCommandExecutedAsync" />
+            @if (_canDelete && _selected.Count > 0)
+            {
+                <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteSelectedAsync">
+                    Delete (@_selected.Count)
+                </MudButton>
+            }
+            @if (_canCreate)
+            {
+                <MudButton Variant="@(Embedded ? Variant.Outlined : Variant.Filled)" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           Size="@(Embedded ? Size.Small : Size.Medium)"
+                           Href="@NewUrl" Class="ml-2">
+                    New
+                </MudButton>
+            }
+        </ToolBarContent>
+        <ColGroup>
+            @if (_canDelete)
+            {
+                <col class="strata-col-check" />
+            }
+            @foreach (var column in _layout.VisibleColumns)
+            {
+                <col @key="column.Name" data-col="@column.Name" style="@(column.Width is { } w ? $"width: {w}px" : null)" />
+            }
+        </ColGroup>
+        <HeaderContent>
+            @foreach (var column in _layout.VisibleColumns)
+            {
+                <MudTh @key="column.Name" data-col="@column.Name">
+                    <MudTableSortLabel T="object" SortLabel="@column.Name" InitialDirection="@InitialDirection(column)">@column.Property.Caption</MudTableSortLabel>
+                    <span class="strata-col-resizer" data-col="@column.Name" title="Drag to resize, double-click for automatic width"></span>
+                </MudTh>
+            }
+        </HeaderContent>
+        <RowTemplate>
+            @foreach (var state in _layout.VisibleColumns)
+            {
+                var column = state.Property;
+                <MudTd DataLabel="@column.Caption" Style="@(IsNumeric(column) ? "text-align: right" : null)">
+                    @if (column.EditorKind == EditorKind.Boolean)
+                    {
+                        @if (column.GetValue(context) is true)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                        }
+                    }
+                    else
+                    {
+                        @column.FormatValue(column.GetValue(context))
+                    }
+                </MudTd>
+            }
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>@(string.IsNullOrEmpty(_search) ? $"No {Entity.PluralCaption.ToLowerInvariant()} yet." : "No matching records.")</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="@PageSizeOptions" />
+        </PagerContent>
+    </MudTable>
+}
+</div>
 
 @code {
+    private static readonly int[] PageSizeOptions = [.. ListLayouts.PageSizes];
+    private static readonly TimeSpan SaveDelay = TimeSpan.FromMilliseconds(800);
+
+    private ElementReference _root;
     private MudTable<object>? _table;
     private HashSet<object> _selected = [];
-    private List<PropertyModel> _columns = [];
     private string? _search;
     private bool _canCreate, _canDelete;
+
+    // The user stratum: _layout is what the table shows, _default what "Reset to default" returns to
+    // (the shared default if an admin saved one, else the model's columns).
+    private ListViewLayout? _layout;
+    private ListViewLayout? _default;
+    private string _settingKey = "";
+    private bool _hasSharedDefault;
+    private int _tableVersion;
+    private bool _chooserOpen;
+    private ListColumnState? _dragging, _dropTarget;
+
+    private CancellationTokenSource? _saveDelay;
+    private bool _savePending;
+    private IJSObjectReference? _columnsModule, _resizer;
+    private DotNetObjectReference<EntityListView>? _self;
 
     [Parameter, EditorRequired] public EntityModel Entity { get; set; } = null!;
 
@@ -99,30 +192,258 @@
     /// <summary>Query parameters for the New page, e.g. ("Customer", "5") to pre-fill the parent.</summary>
     [Parameter] public IReadOnlyList<(string Name, string? Value)> NewQuery { get; set; } = [];
 
+    /// <summary>
+    /// Which layout users save for this list (<see cref="ListLayouts.ViewKey"/>). Defaults to the entity id; a related
+    /// list in a form passes its parent collection, e.g. "customer.Orders", so it keeps its own columns.
+    /// </summary>
+    [Parameter] public string? ViewKey { get; set; }
+
     private string? ReturnUrl => Embedded ? Navigation.ToBaseRelativePath(Navigation.Uri) : null;
 
     private string NewUrl => StrataRoutes.WithQuery(StrataRoutes.New(Entity),
         [.. NewQuery, (StrataRoutes.ReturnUrlParameter, ReturnUrl)]);
+
+    private string RootClass => _layout?.VisibleColumns.Any(c => c.Width is not null) == true ? "strata-list strata-list-sized" : "strata-list";
+
+    private int VisibleCount => _layout?.VisibleColumns.Count() ?? 0;
+
+    private bool IsDefault => _layout is null || _default is null || _layout.SameAs(_default);
 
     private string? _shownFor;
 
     protected override async Task OnParametersSetAsync()
     {
         // The parent form re-renders on every edit; only reset when the list actually shows something else.
-        var shownFor = Entity.Id + "|" + string.Join("|", Filters.Select(f => $"{f.PropertyName}={f.Value}"));
+        var shownFor = (ViewKey ?? Entity.Id) + "|" + Entity.Id + "|" + string.Join("|", Filters.Select(f => $"{f.PropertyName}={f.Value}"));
         if (shownFor == _shownFor) return;
         _shownFor = shownFor;
 
-        _columns = Entity.ListColumns.Where(c => !Filters.Any(f => f.PropertyName == c.Name)).ToList();
+        await SaveNowAsync(); // a pending change to the list shown before
         _canCreate = Permissions.IsAllowed(Entity.ClrType, EntityOperation.Create);
         _canDelete = Permissions.IsAllowed(Entity.ClrType, EntityOperation.Delete);
         _selected = [];
         _search = null;
-        if (_table is not null) await _table.ReloadServerData(); // same component reused for another entity
+        await LoadLayoutAsync(ListLayouts.SettingKey(ViewKey ?? Entity.Id));
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            _self = DotNetObjectReference.Create(this);
+            _columnsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/StrataFx.Blazor/strata-columns.js");
+            _resizer = await _columnsModule.InvokeAsync<IJSObjectReference>("attach", _root, _self);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit went away while starting up.
+        }
+    }
+
+    // ---- the user's layout ----
+
+    private int DefaultPageSize => Embedded ? 10 : 25;
+
+    private IEnumerable<string> ExcludedColumns => Filters.Select(f => f.PropertyName);
+
+    private ListViewLayout Resolve(ListLayout? layout) => ListLayouts.Resolve(Entity, layout, DefaultPageSize, ExcludedColumns);
+
+    private async Task LoadLayoutAsync(string settingKey)
+    {
+        _settingKey = settingKey;
+        ListLayout? shared = null, mine = null;
+        try
+        {
+            shared = await Settings.GetSharedAsync<ListLayout>(settingKey);
+            mine = await Settings.GetAsync<ListLayout>(settingKey);
+        }
+        catch (Exception ex)
+        {
+            // Without saved settings the list still works, with the model's columns.
+            Snackbar.Add("Your saved columns could not be loaded. " + ErrorText.For(ex), Severity.Warning);
+        }
+        _hasSharedDefault = shared is not null;
+        _default = Resolve(shared);
+        _layout = Resolve(mine ?? shared);
+        _tableVersion++; // a new table, so the saved sort and page size apply from the first page
+    }
+
+    private SortDirection InitialDirection(ListColumnState column) =>
+        !string.Equals(_layout?.SortProperty, column.Name, StringComparison.OrdinalIgnoreCase) ? SortDirection.None
+        : _layout!.SortDescending ? SortDirection.Descending : SortDirection.Ascending;
+
+    private string ColumnRowClass(ListColumnState column) =>
+        "strata-column-row"
+        + (column == _dragging ? " strata-dragging" : "")
+        + (column == _dropTarget && _dragging is not null && column != _dragging ? " strata-drop-target" : "");
+
+    private Task SetVisibleAsync(ListColumnState column, bool visible)
+    {
+        if (!visible && VisibleCount == 1) return Task.CompletedTask; // keep at least one column
+        column.Visible = visible;
+        ScheduleSave();
+        return Task.CompletedTask;
+    }
+
+    private Task MoveAsync(int from, int to)
+    {
+        if (_layout is null || to < 0 || to >= _layout.Columns.Count) return Task.CompletedTask;
+        var column = _layout.Columns[from];
+        _layout.Columns.RemoveAt(from);
+        _layout.Columns.Insert(to, column);
+        ScheduleSave();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Drops the dragged column in front of <paramref name="target"/>.</summary>
+    private Task DropAsync(ListColumnState target)
+    {
+        var dragged = _dragging;
+        _dragging = _dropTarget = null;
+        if (_layout is null || dragged is null || dragged == target) return Task.CompletedTask;
+        _layout.Columns.Remove(dragged);
+        _layout.Columns.Insert(_layout.Columns.IndexOf(target), dragged);
+        ScheduleSave();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Called by strata-columns.js when a resize ends, with the width of every visible column.</summary>
+    [JSInvokable]
+    public Task OnColumnsResized(Dictionary<string, int> widths) => InvokeAsync(() =>
+    {
+        if (_layout is null) return;
+        foreach (var column in _layout.VisibleColumns)
+            if (widths.TryGetValue(column.Name, out var width))
+                column.Width = ListLayouts.ClampWidth(width);
+        ScheduleSave();
+        StateHasChanged();
+    });
+
+    /// <summary>Called by strata-columns.js on a double-click on a column's edge.</summary>
+    [JSInvokable]
+    public Task OnColumnAutoWidth(string name) => InvokeAsync(() =>
+    {
+        if (_layout?.Columns.FirstOrDefault(c => c.Name == name) is not { } column) return;
+        column.Width = null;
+        ScheduleSave();
+        StateHasChanged();
+    });
+
+    private async Task ResetAsync()
+    {
+        CancelPendingSave();
+        try
+        {
+            await Settings.ResetAsync(_settingKey);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+            return;
+        }
+        await LoadLayoutAsync(_settingKey);
+        Snackbar.Add(_hasSharedDefault ? "Columns reset to the default for everyone." : "Columns reset to default.", Severity.Info);
+    }
+
+    private async Task SaveForEveryoneAsync()
+    {
+        if (_layout is null) return;
+        CancelPendingSave();
+        try
+        {
+            await Settings.SaveSharedAsync(_settingKey, _layout.ToLayout());
+            await Settings.ResetAsync(_settingKey); // the user's layout is the default now
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+            return;
+        }
+        _hasSharedDefault = true;
+        _default = Resolve(_layout.ToLayout());
+        Snackbar.Add($"Everyone now gets these columns for {(Title ?? Entity.PluralCaption).ToLowerInvariant()}, unless they changed their own.", Severity.Success);
+    }
+
+    private async Task ClearForEveryoneAsync()
+    {
+        CancelPendingSave();
+        try
+        {
+            await Settings.ResetSharedAsync(_settingKey);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+            return;
+        }
+        _hasSharedDefault = false;
+        _default = Resolve(null);
+        _savePending = true; // keeps the current columns as this user's own, unless they match the model
+        await SaveNowAsync();
+        Snackbar.Add("The default for everyone is cleared; lists show the model's columns again.", Severity.Info);
+    }
+
+    // ---- saving: debounced, so a burst of changes is one write ----
+
+    private void ScheduleSave()
+    {
+        _savePending = true;
+        _saveDelay?.Cancel();
+        var delay = _saveDelay = new CancellationTokenSource();
+        _ = Task.Delay(SaveDelay, delay.Token).ContinueWith(
+            t => { if (!t.IsCanceled) _ = InvokeAsync(SaveNowAsync); },
+            CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
+    private void CancelPendingSave()
+    {
+        _saveDelay?.Cancel();
+        _savePending = false;
+    }
+
+    private async Task SaveNowAsync()
+    {
+        _saveDelay?.Cancel();
+        if (!_savePending || _layout is null || _default is null) return;
+        _savePending = false;
+        try
+        {
+            // Matching the default saves nothing, so later model changes reach this user again.
+            if (_layout.SameAs(_default)) await Settings.ResetAsync(_settingKey);
+            else await Settings.SaveAsync(_settingKey, _layout.ToLayout());
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Your columns could not be saved. " + ErrorText.For(ex), Severity.Warning);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await SaveNowAsync();
+        try
+        {
+            if (_resizer is not null)
+            {
+                await _resizer.InvokeVoidAsync("dispose");
+                await _resizer.DisposeAsync();
+            }
+            if (_columnsModule is not null) await _columnsModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The browser is gone; nothing to clean up there.
+        }
+        _self?.Dispose();
+        _saveDelay?.Dispose();
+    }
+
+    // ---- data ----
 
     private async Task<TableData<object>> LoadAsync(TableState state, CancellationToken cancellationToken)
     {
+        RememberSortAndPageSize(state);
         try
         {
             var result = await Data.QueryAsync(Entity, new QueryRequest
@@ -130,7 +451,7 @@
                 Skip = state.Page * state.PageSize,
                 Take = state.PageSize,
                 Search = _search,
-                SortProperty = string.IsNullOrEmpty(state.SortLabel) || state.SortDirection == SortDirection.None ? null : state.SortLabel,
+                SortProperty = SortOf(state),
                 SortDescending = state.SortDirection == SortDirection.Descending,
                 Filters = Filters,
             }, cancellationToken);
@@ -141,6 +462,21 @@
             Snackbar.Add(ErrorText.For(ex), Severity.Error);
             return new TableData<object> { Items = [], TotalItems = 0 };
         }
+    }
+
+    private static string? SortOf(TableState state) =>
+        string.IsNullOrEmpty(state.SortLabel) || state.SortDirection == SortDirection.None ? null : state.SortLabel;
+
+    private void RememberSortAndPageSize(TableState state)
+    {
+        if (_layout is null) return;
+        var sort = SortOf(state);
+        var descending = sort is not null && state.SortDirection == SortDirection.Descending;
+        if (sort == _layout.SortProperty && descending == _layout.SortDescending && state.PageSize == _layout.PageSize) return;
+        _layout.SortProperty = sort;
+        _layout.SortDescending = descending;
+        if (ListLayouts.PageSizes.Contains(state.PageSize)) _layout.PageSize = state.PageSize;
+        ScheduleSave();
     }
 
     private async Task OnSearchAsync(string? text)

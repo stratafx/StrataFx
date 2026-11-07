@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using StrataFx.EFCore;
 using StrataFx.Sample.Sales;
 
 namespace StrataFx.Sample.Data;
@@ -25,6 +26,7 @@ public sealed class SampleDbContext(DbContextOptions<SampleDbContext> options) :
         modelBuilder.Entity<Order>().HasOne(o => o.Customer).WithMany(c => c.Orders).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<OrderLine>().HasOne(l => l.Order).WithMany(o => o.Lines).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<OrderLine>().HasOne(l => l.Product).WithMany().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.AddStrataUserSettings(); // per-user list layouts (fx.AddEntityFrameworkCoreUserSettings)
     }
 
     /// <summary>Creates the database and adds demo data the first time the sample runs.</summary>

@@ -21,6 +21,7 @@ builder.Services.AddStrataFx(fx =>
     fx.AddModule<SalesModule>();
     fx.AddJsonModelLayer(Path.Combine(builder.Environment.ContentRootPath, "model.json"));
     fx.UseEntityFrameworkCore<SampleDbContext>();
+    fx.AddEntityFrameworkCoreUserSettings<SampleDbContext>(); // each user's list layouts, saved in the database
 
     // Users sign in with ASP.NET Core Identity; their roles decide what they can see and do.
     // SalesModule defines the SalesViewer and SalesManager roles; Admin may do everything.
