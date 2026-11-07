@@ -1,0 +1,32 @@
+@*#if (auth)*@
+<Router AppAssembly="typeof(Program).Assembly"
+        AdditionalAssemblies="new[] { StrataFxBlazorExtensions.PagesAssembly, StrataFxIdentityExtensions.PagesAssembly }"
+        NotFoundPage="typeof(Pages.NotFound)">
+    <Found Context="routeData">
+        @* Every request already needs a signed-in user (see UseAspNetCoreIdentity). This also covers the circuit,
+           e.g. when revalidation signs the user out while the app is open. *@
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated == true)
+                {
+                    <MudAlert Severity="Severity.Warning">You don't have access to this page.</MudAlert>
+                }
+                else
+                {
+                    <RedirectToLogin />
+                }
+            </NotAuthorized>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>
+@*#else*@
+<Router AppAssembly="typeof(Program).Assembly"
+        AdditionalAssemblies="new[] { StrataFxBlazorExtensions.PagesAssembly }"
+        NotFoundPage="typeof(Pages.NotFound)">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>
+@*#endif*@

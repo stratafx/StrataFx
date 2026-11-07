@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "StrataFx contributors",
+  "classifications": [ "Web", "Blazor", "StrataFx" ],
+  "identity": "StrataFx.App.CSharp",
+  "groupIdentity": "StrataFx.App",
+  "name": "StrataFx App",
+  "shortName": "stratafx",
+  "description": "A Blazor Server app built with StrataFx: entities in C#, generated list and detail pages, a model.json layer, SQLite and (optionally) sign-in with ASP.NET Core Identity.",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "sourceName": "StrataFxApp",
+  "preferNameDirectory": true,
+  "guids": [ "a3f1c6de-5b2e-4f0a-9c51-7d2e8b1f4a60" ],
+  "symbols": {
+    "auth": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "true",
+      "description": "Include sign-in with ASP.NET Core Identity, users and roles (the first user is read from configuration)."
+    },
+    "StrataFxVersion": {
+      "type": "parameter",
+      "datatype": "string",
+      "defaultValue": "0.2.0-preview.1",
+      "replaces": "STRATAFX_PACKAGE_VERSION",
+      "description": "The version of the StrataFx packages the project references."
+    },
+    "skipRestore": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Skip the automatic restore of the project on create."
+    },
+    "HttpPort": {
+      "type": "generated",
+      "generator": "port",
+      "parameters": { "low": 5000, "high": 5300 },
+      "replaces": "5080"
+    },
+    "HttpsPort": {
+      "type": "generated",
+      "generator": "port",
+      "parameters": { "low": 7000, "high": 7300 },
+      "replaces": "7080"
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "exclude": [ "**/bin/**", "**/obj/**", "**/*.db", "**/*.db-shm", "**/*.db-wal" ]
+        }
+      ]
+    }
+  ],
+  "primaryOutputs": [ { "path": "StrataFxApp.csproj" } ],
+  "postActions": [
+    {
+      "condition": "(!skipRestore)",
+      "description": "Restore NuGet packages required by this project.",
+      "manualInstructions": [ { "text": "Run 'dotnet restore'" } ],
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "continueOnError": true
+    }
+  ]
+}

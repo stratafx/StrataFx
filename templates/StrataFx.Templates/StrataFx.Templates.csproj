@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Packs the `dotnet new stratafx` template. Nothing is compiled: the content folder is copied into the package. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageType>Template</PackageType>
+    <PackageId>StrataFx.Templates</PackageId>
+    <Title>StrataFx templates</Title>
+    <Description>Project templates for StrataFx. Install with: dotnet new install StrataFx.Templates, then create an app with: dotnet new stratafx -n MyApp</Description>
+    <PackageTags>$(PackageTags);dotnet-new;templates;blazor</PackageTags>
+
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IncludeSymbols>false</IncludeSymbols>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <!-- .template.config and .gitignore start with a dot, which NuGet leaves out by default. -->
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <!-- NU5128: a template package has no lib folder on purpose. -->
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <_TemplateJson>content\StrataFxApp\.template.config\template.json</_TemplateJson>
+    <_StampedTemplateJson>$(IntermediateOutputPath)template.json</_StampedTemplateJson>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="content\**\*" Exclude="content\**\bin\**;content\**\obj\**;content\**\*.db;$(_TemplateJson)"
+             Pack="true" PackagePath="content" />
+    <None Include="$(_TemplateJson)" />
+  </ItemGroup>
+
+  <!--
+    The template's StrataFxVersion symbol defaults to the version being packed (template.json says 0.0.0-dev), so
+    `dotnet new stratafx` references the packages released with it. The version is only set in Directory.Build.props
+    (or by -p:Version), and no Inputs/Outputs here, so a different -p:Version always re-stamps.
+  -->
+  <Target Name="StampTemplateVersion" BeforeTargets="_GetPackageFiles">
+    <PropertyGroup>
+      <_TemplateJsonText>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\$(_TemplateJson)'))</_TemplateJsonText>
+      <_TemplateJsonText>$(_TemplateJsonText.Replace('0.0.0-dev', '$(PackageVersion)'))</_TemplateJsonText>
+    </PropertyGroup>
+    <Error Condition="!$(_TemplateJsonText.Contains('&quot;defaultValue&quot;: &quot;$(PackageVersion)&quot;'))"
+           Text="Could not stamp the StrataFx version into $(_TemplateJson)." />
+    <WriteLinesToFile File="$(_StampedTemplateJson)" Lines="$([MSBuild]::Escape($(_TemplateJsonText)))" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Content Include="$(_StampedTemplateJson)" Pack="true" PackagePath="content\StrataFxApp\.template.config\template.json" />
+    </ItemGroup>
+  </Target>
+
+</Project>

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <ResourcePreloader />
+    @* Fonts used by the built-in StrataFx themes. *@
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Inter:wght@400;500&family=IBM+Plex+Sans:wght@400;500&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="@Assets["_content/MudBlazor/MudBlazor.min.css"]" />
+    <link rel="stylesheet" href="@Assets["_content/StrataFx.Blazor/strata.css"]" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["StrataFxApp.styles.css"]" />
+    <ImportMap />
+    <HeadOutlet @rendermode="PageRenderMode" />
+</head>
+
+<body>
+    @* The whole app is interactive so the generated StrataFx pages can respond to clicks and searches. *@
+    <Routes @rendermode="PageRenderMode" />
+    <ReconnectModal />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="@Assets["_content/MudBlazor/MudBlazor.min.js"]"></script>
+</body>
+
+</html>
+
+@code {
+@*#if (auth)*@
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = null!;
+
+    // Pages marked [ExcludeFromInteractiveRouting] (sign in, access denied) render as static HTML, because signing
+    // in sets a cookie and only an HTTP response can do that. Every other page runs interactively on the server.
+    private IComponentRenderMode? PageRenderMode => HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
+@*#else*@
+    private static IComponentRenderMode PageRenderMode => InteractiveServer;
+@*#endif*@
+}

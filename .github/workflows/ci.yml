@@ -34,3 +34,15 @@ jobs:
         with:
           name: test-results
           path: "**/TestResults/*.trx"
+
+      # Catches packaging breaks (metadata, static web assets, the template) on every push.
+      - name: Pack
+        run: dotnet pack StrataFx.sln --configuration Release --no-build --output artifacts
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 7

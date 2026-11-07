@@ -1,0 +1,20 @@
+// A JSON model layer, applied on top of the model built from the entity classes.
+// Change captions, visibility, order or navigation here without recompiling (restart the app to apply).
+// Entity names are the class names in lower case; property names are the C# names.
+{
+  "title": "StrataFxApp",
+  "entities": {
+    "company": {
+      "properties": {
+        "Website": { "visibleInList": false },
+        "Contacts": { "caption": "People" }
+      }
+    },
+    "contact": {
+      "pluralCaption": "Contacts",
+      "properties": {
+        "Phone": { "visibleInList": false }
+      }
+    }
+  }
+}

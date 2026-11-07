@@ -1,13 +1,41 @@
 # StrataFx
 
 [![CI](https://github.com/stratafx/StrataFx/actions/workflows/ci.yml/badge.svg)](https://github.com/stratafx/StrataFx/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![NuGet](https://img.shields.io/nuget/v/StrataFx.Core.svg)](https://www.nuget.org/packages/StrataFx.Core)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/stratafx/StrataFx/blob/main/LICENSE)
 
 **StrataFx** is an open-source, model-driven application framework for .NET.
 You write plain C# entity classes; StrataFx generates the list views, detail forms, lookups,
 navigation, validation and permission checks for them, and lets you customize everything in layers.
 
-> Status: early preview (0.1). APIs will change.
+> Status: early preview (0.1). APIs will change between 0.x versions.
+
+## Install
+
+Create a new app from the template:
+
+```bash
+dotnet new install StrataFx.Templates
+dotnet new stratafx -n MyApp
+cd MyApp
+dotnet run
+```
+
+With sign-in (the default), configure the first user before you run; see the generated `README.md` or
+[getting started](https://github.com/stratafx/StrataFx/blob/main/docs/getting-started.md#3-create-the-first-user-sign-in-only). Use
+`dotnet new stratafx -n MyApp --auth false` for an app without sign-in.
+
+Or add the packages to an existing Blazor Server app (.NET 10):
+
+```bash
+dotnet add package StrataFx.Blazor
+dotnet add package StrataFx.EFCore
+dotnet add package StrataFx.Identity   # optional: sign-in with ASP.NET Core Identity
+```
+
+**Documentation:** [Getting started](https://github.com/stratafx/StrataFx/blob/main/docs/getting-started.md) ·
+[Concepts](https://github.com/stratafx/StrataFx/blob/main/docs/concepts.md) · [Changelog](https://github.com/stratafx/StrataFx/blob/main/CHANGELOG.md) ·
+[Contributing](https://github.com/stratafx/StrataFx/blob/main/CONTRIBUTING.md)
 
 ## Why "Strata"?
 
@@ -21,7 +49,7 @@ The application model is built in layers (strata), and each one can override the
 The user stratum never changes the shared model: it is applied when a view is built, so every user sees the
 lower layers plus their own choices.
 
-## Quick start
+## Quick start (existing app)
 
 ```csharp
 [StrataEntity(NavigationGroup = "Sales")]
@@ -52,114 +80,37 @@ app.MapRazorComponents<App>()
 ```
 
 Add `StrataFxBlazorExtensions.PagesAssembly` to the router's `AdditionalAssemblies`, put `<StrataNavMenu />`
-in your layout, and you get `/app/customer` (list) and `/app/customer/{id}` (detail) pages.
+in your layout, and you get `/app/customer` (list) and `/app/customer/{id}` (detail) pages. The template sets up the
+layout, theme, router and sign-in for you; [getting started](https://github.com/stratafx/StrataFx/blob/main/docs/getting-started.md) walks through
+the rest.
 
-## Projects
+## Packages
 
-| Project | What it contains |
+| Package | What it contains |
 |---|---|
 | `StrataFx.Core` | Application model and builder, model layers, commands, modules, security, validation, `IDataStore`. No UI or ORM dependencies. |
 | `StrataFx.EFCore` | `IDataStore` on EF Core: paging, search, sorting, lookups, saves, with permission and validation enforcement. Optional per-user settings store. |
 | `StrataFx.Blazor` | MudBlazor UI: generated list and detail views, property editor registry, navigation menu, command bar, and an `ICurrentUser` read from Blazor's authentication state (works with any authentication). |
 | `StrataFx.Identity` | ASP.NET Core Identity: `fx.UseAspNetCoreIdentity<TUser>()`, sign-in, sign-out and access-denied pages, a user menu for the app bar, and a seeder for roles and users. |
-| `samples/StrataFx.Sample` | A sales app (customers, products, orders) with a module, commands, a rule and a JSON layer. |
-| `tests/StrataFx.Core.Tests` | Unit tests, including EF Core tests on in-memory SQLite. |
+| `StrataFx.Templates` | The `dotnet new stratafx` project template. |
+| `samples/StrataFx.Sample` (not packaged) | A sales app (customers, products, orders) with a module, commands, a rule and a JSON layer. |
+| `tests/StrataFx.Core.Tests` (not packaged) | Unit tests, including EF Core tests on in-memory SQLite. |
 
 ## Concepts
 
-- **Entities**: any class with a key (`Id`, `{Type}Id` or `[Key]`) and a parameterless constructor.
-  Reference properties to other entities become lookups; their foreign-key scalars are hidden automatically.
-- **Collections**: a `List<T>` of another entity is shown on the detail form.
-  - `[OwnedCollection]` (e.g. `Order.Lines`): an editable grid; items are validated, inserted, updated and
-    deleted together with the parent in one save.
-  - Otherwise related (e.g. `Customer.Orders`): an embedded list of separate records, filtered to the parent.
-    *New* pre-fills the parent and returns to it after saving.
-  - Use `[InverseProperty]` when the item has more than one reference to the parent type.
-- **Save handlers**: `IEntitySaveHandler` runs before validation on every save, e.g. to compute totals.
-- **Change handlers**: `EntityChangeHandler<T>` (or `IEntityChangeHandler`) reacts when a user changes a field in a
-  form, before saving, and the form shows the result right away. In the sample, picking a product fills in the line's
-  unit price, and the order total updates as lines change. For a row of an owned collection, the row's handlers run
-  first, then the parent's for the collection property; adding or removing a row raises a change on the parent too.
-  The context also has `ParentEntity` and `ParentInstance` (for rows), `Kind`, `Item`, and `Data` for lookups.
-  Register with `fx.AddChangeHandler<T>()`. Values handlers set don't raise further changes, and failures show a
-  message without breaking the form. Keep values that must be right in a save handler too, since data can be saved
-  without a form.
-- **Commands**: business operations shown as buttons (`StrataCommand<T>`), resolved from DI. A command is shown
-  only to users with its `RequiredOperation` on the entity (`Update` by default; override with `Read` for commands
-  that only look, such as export or print).
-- **Rules**: validation beyond data annotations (`IEntityRule`), enforced in the UI and the data store.
-- **Database constraints**: the EF Core store reads unique indexes and foreign keys from the EF model and checks them
-  before saving, so users see messages built from captions instead of database errors: "Order # SO-1002 is already
-  used." next to the field (owned items too, including two items in the same save), and "This product is used on
-  12 order lines and can't be deleted." for a delete blocked by `Restrict`/`NoAction` references. The checks are
-  plain queries, so they work the same on every provider; if another user wins a race, the database error is
-  explained the same way. The delete confirmation says what a cascade removes ("This will also delete 3 orders and
-  their lines.", `IDataStore.GetDeleteImpactAsync`).
-- **Modules**: `StrataModule` bundles entities, model layers, commands, rules, save and change handlers, and permissions.
-- **Security**: allow-all by default; `fx.UsePermissionPolicy(...)` enables role-based type permissions
-  (`policy.Role("Viewer").Allow<Customer>(EntityOperation.Read)`, `policy.Role("Admin").AllowAll()`). A user gets
-  the union of their roles' permissions. The UI hides what a user may not do: navigation entries, New, Delete, Save,
-  commands, related lists, and shows "You don't have access" for a list or detail link they can't open. The data store
-  enforces the same policy on every query, save and delete, so it holds even when code calls the store directly
-  (`StrataAccessDeniedException`).
-  - **Who the user is**: `ICurrentUser`. `fx.UseBlazorAuthenticationState()` (in `StrataFx.Blazor`) reads the user and
-    their role claims from Blazor's `AuthenticationStateProvider`, so it works with any ASP.NET Core authentication
-    (Identity, Entra ID, OpenID Connect). It does not use `HttpContext`, which interactive circuits don't have.
-  - **ASP.NET Core Identity** (`StrataFx.Identity`):
+- **Entities**: plain classes with a key. References become lookups; `List<T>` collections are shown in the form,
+  either **owned** (`[OwnedCollection]`, edited and saved with the parent) or **related** (separate records).
+- **Model layers**: code, modules, `model.json` and each user's list layouts, each overriding the one below.
+- **Modules** bundle entities, layers, commands, rules, handlers and permissions for a feature.
+- **Commands** are business operations shown as buttons; **rules** validate beyond data annotations; **save
+  handlers** compute values on every save; **change handlers** react to edits in a form.
+- **Data**: `IDataStore`, implemented on EF Core with permission and validation enforcement and friendly messages
+  for unique indexes and blocked deletes.
+- **Security**: role-based permissions enforced in the UI and the data store; any ASP.NET Core authentication, or
+  `StrataFx.Identity` for sign-in pages out of the box.
+- **Editors and themes**: replaceable property editors and slim light/dark themes on MudBlazor.
 
-    ```csharp
-    builder.Services.AddStrataFx(fx =>
-    {
-        // ...
-        fx.UseAspNetCoreIdentity<IdentityUser>().AddEntityFrameworkStores<AppDbContext>(); // AppDbContext : IdentityDbContext
-        fx.UsePermissionPolicy(policy => policy.Role("Admin").AllowAll());
-    });
-    // ...
-    await app.Services.SeedStrataIdentityAsync<IdentityUser>(users); // creates the policy's roles and the given users
-    app.MapStaticAssets().AllowAnonymous();
-    app.MapRazorComponents<App>()
-       .AddInteractiveServerRenderMode()
-       .AddAdditionalAssemblies(StrataFxBlazorExtensions.PagesAssembly, StrataFxIdentityExtensions.PagesAssembly);
-    app.MapStrataFxIdentity(); // sign-out endpoint
-    ```
-
-    Every page then needs a signed-in user (turn off with `RequireSignIn = false`). The sign-in page sets a cookie, so
-    it renders as static HTML: in `App.razor` use `HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null`
-    as the render mode of `<Routes>` and `<HeadOutlet>`. In `Routes.razor` use `AuthorizeRouteView` with
-    `<RedirectToLogin />` when not authorized, and put `<StrataUserMenu />` (name and Log out) in the app bar.
-- **User layouts** (the user stratum): the columns button in a list's toolbar lets each user show or hide columns
-  and reorder them (drag, or the arrows); dragging a column header's right edge resizes it (double-click for
-  automatic width). The sort and page size are remembered too, and **Reset to default** drops the user's layout.
-  - Users choose from the properties that can be shown in a list (not keys, foreign keys, collections or multi-line
-    text); `visibleInList` in code or model.json only sets the default.
-  - Layouts are merged with the model when the list opens: removed or renamed properties are ignored, and properties
-    added later appear where the model puts them, so model changes never break saved layouts. A layout that matches
-    the default is not stored, so later model changes reach that user too.
-  - A related list inside a form ("Customer → Order history") has its own layout, separate from the full list.
-  - Saved per user name and key (`list/customer`, `list/customer.Orders`) through `IUserSettingsStore`. To keep
-    them in your database:
-
-    ```csharp
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.AddStrataUserSettings(); // StrataUserSetting table, unique on UserName + Key
-    }
-    // in AddStrataFx:
-    fx.AddEntityFrameworkCoreUserSettings<AppDbContext>();
-    ```
-
-    Without it, layouts are kept in memory until the app restarts. Users who are not signed in get layouts for their
-    session only, never shared with other visitors.
-  - Users in the `Admin` role also get **Save as default for everyone**, a shared layer between model.json and each
-    user's own layout (change the role with `fx.UserSettings.SharedDefaultsRole`, or set it to `null` to turn it off).
-- **Editors**: replace or add property editors with `AddStrataFxBlazor(e => e.Register<MyEditor>("name"))`
-  and pick them with `[PropertyEditor("name")]`.
-- **Themes**: slim built-in themes (Fluent slim by default, plus Graphite, Indigo slate, Nordic and Zinc emerald),
-  each with light and dark palettes. Use `<StrataThemeProvider />` instead of `<MudThemeProvider />`, link
-  `_content/StrataFx.Blazor/strata.css`, and put `<StrataThemeSwitcher />` in the app bar so users can pick a theme
-  and mode (remembered in their browser). Configure with
-  `AddStrataFxBlazor(themes: t => { t.DefaultThemeId = StrataThemes.Nordic.Id; t.Themes.Add(StrataThemes.Create(...)); })`,
-  or set `t.AllowUserSelection = false` to give everyone the default.
+Details and code: [docs/concepts.md](https://github.com/stratafx/StrataFx/blob/main/docs/concepts.md).
 
 ## Run the sample
 
@@ -188,6 +139,11 @@ user keeps their own layout.
 - User and role management pages; external sign-in (Entra ID, Google) on the Identity sign-in page
 - ~~ASP.NET Core Identity integration~~ (done: `StrataFx.Identity`)
 - ~~Per-user model layer stored in the database~~ (done: user list layouts)
+
+## Contributing
+
+Build, test and coding conventions are in [CONTRIBUTING.md](https://github.com/stratafx/StrataFx/blob/main/CONTRIBUTING.md); maintainers release with
+[RELEASING.md](https://github.com/stratafx/StrataFx/blob/main/RELEASING.md).
 
 ## License
 

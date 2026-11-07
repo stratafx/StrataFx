@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+<!--#if (auth) -->
+    <!-- Keeps the first user's password out of the project: dotnet user-secrets set "AdminUser:Password" "..." -->
+    <UserSecretsId>StrataFxApp-a3f1c6de-5b2e-4f0a-9c51-7d2e8b1f4a60</UserSecretsId>
+<!--#endif -->
+    <StrataFxVersion>STRATAFX_PACKAGE_VERSION</StrataFxVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StrataFx.Blazor" Version="$(StrataFxVersion)" />
+    <PackageReference Include="StrataFx.EFCore" Version="$(StrataFxVersion)" />
+<!--#if (auth) -->
+    <PackageReference Include="StrataFx.Identity" Version="$(StrataFxVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.14" />
+<!--#endif -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.14" />
+  </ItemGroup>
+
+</Project>

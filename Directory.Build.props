@@ -5,16 +5,46 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors Condition="'$(Configuration)' == 'Release'">true</TreatWarningsAsErrors>
+  </PropertyGroup>
 
-    <Version>0.1.0-preview.1</Version>
+  <!--
+    The version of every StrataFx package, and the default package version the project template references.
+    This is the only place it is set. A release overrides it from the git tag: dotnet pack -p:Version=0.2.0
+  -->
+  <PropertyGroup>
+    <VersionPrefix>0.1.0</VersionPrefix>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <Authors>StrataFx contributors</Authors>
+    <Copyright>Copyright (c) StrataFx contributors</Copyright>
     <Description>StrataFx: an open-source, model-driven application framework for .NET. Define entities in C#; get CRUD UI, navigation, validation and security generated.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>blazor;crud;framework;model-driven;low-code;efcore;mudblazor</PackageTags>
+    <PackageTags>stratafx;crud;framework;model-driven;low-code;dotnet</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageProjectUrl>https://github.com/stratafx/StrataFx</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/stratafx/StrataFx</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReleaseNotes>https://github.com/stratafx/StrataFx/blob/main/CHANGELOG.md</PackageReleaseNotes>
+
+    <!-- Source Link (built into the .NET SDK for GitHub): the repository URL and commit go into the package and the PDBs. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- Deterministic paths in PDBs on CI (GitHub Actions), so a build from the same commit gives the same bits. -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- XML docs in the packages, for IntelliSense. Not every public member or parameter has a comment yet, so CS1591 and CS1573 stay quiet. -->
+  <PropertyGroup Condition="'$(IsPackable)' != 'false'">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(IsPackable)' != 'false'">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 </Project>

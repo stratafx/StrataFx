@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+*.user
+# The SQLite database is created on first run.
+*.db
+*.db-shm
+*.db-wal

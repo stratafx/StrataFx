@@ -2,9 +2,10 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <Description>ASP.NET Core Identity for StrataFx: sign-in, sign-out and access-denied pages, a user menu, users and roles for the role-based permission policy, and a role and user seeder.</Description>
+    <PackageTags>$(PackageTags);identity;authentication;aspnetcore</PackageTags>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Description>ASP.NET Core Identity for StrataFx: sign-in pages, users and roles for the role-based permission policy.</Description>
   </PropertyGroup>
 
   <ItemGroup>

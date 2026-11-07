@@ -5,11 +5,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.14" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
   </ItemGroup>
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <Description>Entity Framework Core data store for StrataFx: paging, search, sorting, lookups, owned-collection saves, permission and validation enforcement, friendly unique-index and delete messages, and per-user settings storage.</Description>
+    <PackageTags>$(PackageTags);efcore;entity-framework-core;orm</PackageTags>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
