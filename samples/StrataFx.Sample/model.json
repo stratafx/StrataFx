@@ -1,5 +1,6 @@
 // A JSON model layer, applied on top of the model built from the entity classes.
-// Change captions, visibility, order or navigation here without recompiling (restart the app to apply).
+// Change captions, visibility, order or navigation here without recompiling. Sign in as admin and use the model
+// designer (/strata/designer) to change it visually: it edits this file in place, keeping these comments.
 {
   "title": "StrataFx Sample",
   "entities": {

@@ -19,12 +19,16 @@ else if (_instance is null)
 }
 else
 {
+    <CascadingValue Name="@StrataPreview.CascadingName" Value="IsPreview" IsFixed="true">
     <MudPaper Elevation="1" Class="strata-detail pa-3">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-2" Wrap="Wrap.Wrap">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackUrl" Size="Size.Small" aria-label="Back" />
+            @if (!IsPreview)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackUrl" Size="Size.Small" aria-label="Back" />
+            }
             <MudText Typo="Typo.h6" Class="ml-1">@Title</MudText>
             <MudSpacer />
-            @if (!_isNew)
+            @if (!_isNew && !IsPreview)
             {
                 <CommandBar Entity="Entity" Target="CommandTarget.Detail" Selection="@(new[] { _instance })" Executed="OnCommandExecutedAsync" Size="Size.Small" />
             }
@@ -71,6 +75,7 @@ else
             </div>
         }
     </MudPaper>
+    </CascadingValue>
 }
 
 @code {
@@ -87,6 +92,13 @@ else
     /// <summary>The record's key from the URL, or null to create a new record.</summary>
     [Parameter] public string? Key { get; set; }
 
+    /// <summary>A read-only preview (the model designer): no saving, deleting, commands or navigation.</summary>
+    [Parameter] public bool Preview { get; set; }
+
+    [CascadingParameter(Name = StrataPreview.CascadingName)] public bool InPreview { get; set; }
+
+    private bool IsPreview => Preview || InPreview;
+
     /// <summary>Multiline text takes a full row; everything else fits three to a row on wide screens.</summary>
     private static bool Wide(PropertyModel property) => property.EditorKind == EditorKind.MultilineText;
 
@@ -101,8 +113,8 @@ else
         _query = StrataRoutes.ParseQuery(Navigation.Uri);
         _groups = Entity.DetailItems.Where(p => p.EditorKind != EditorKind.Collection).GroupBy(p => p.Group).ToList();
         _collections = Entity.DetailItems.Where(p => p.EditorKind == EditorKind.Collection).ToList();
-        _canSave = Permissions.IsAllowed(Entity.ClrType, _isNew ? EntityOperation.Create : EntityOperation.Update);
-        _canDelete = Permissions.IsAllowed(Entity.ClrType, EntityOperation.Delete);
+        _canSave = !IsPreview && Permissions.IsAllowed(Entity.ClrType, _isNew ? EntityOperation.Create : EntityOperation.Update);
+        _canDelete = !IsPreview && Permissions.IsAllowed(Entity.ClrType, EntityOperation.Delete);
         _errors = [];
         _generalErrors = [];
         await LoadAsync();
@@ -185,7 +197,7 @@ else
 
     private async Task SaveAsync(bool close)
     {
-        if (_instance is null) return;
+        if (_instance is null || IsPreview) return;
         if (!ShowErrors(Validator.Validate(Entity, _instance))) return;
 
         _busy = true;
@@ -234,7 +246,7 @@ else
 
     private async Task DeleteAsync()
     {
-        if (_instance is null) return;
+        if (_instance is null || IsPreview) return;
         var impact = await ErrorText.DeleteImpactAsync(Data, Entity, [_instance]);
         var confirmed = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete this {Entity.Caption.ToLowerInvariant()}? {impact}".TrimEnd(), yesText: "Delete", cancelText: "Cancel");
         if (confirmed != true) return;

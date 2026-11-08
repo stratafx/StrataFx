@@ -55,7 +55,7 @@ public class ModelLayerTests
     public void Json_layer_reports_typos(string json, string expected)
     {
         var builder = new AppModelBuilder().AddEntity<Company>().AddLayer(new JsonModelLayer("bad", json));
-        var ex = Assert.Throws<InvalidOperationException>(() => builder.Build());
+        var ex = Assert.ThrowsAny<InvalidOperationException>(() => builder.Build());
         Assert.Contains(expected, ex.Message);
     }
 

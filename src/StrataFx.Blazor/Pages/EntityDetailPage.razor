@@ -1,6 +1,6 @@
 @page "/app/{EntityId}/new"
 @page "/app/{EntityId}/{Key}"
-@inject AppModel Model
+@inject IAppModelProvider Models
 @inject IPermissionService Permissions
 
 @if (_entity is null)
@@ -21,6 +21,7 @@ else
 
 @code {
     private EntityModel? _entity;
+    private AppModel Model = null!;
 
     [Parameter] public string EntityId { get; set; } = "";
 
@@ -30,5 +31,10 @@ else
     /// <summary>Viewing needs Read; the New page needs Create. Saving changes is checked by the form and the store.</summary>
     private EntityOperation RequiredOperation => Key is null ? EntityOperation.Create : EntityOperation.Read;
 
-    protected override void OnParametersSet() => _entity = Model.FindEntity(EntityId);
+    // The model in use when the page is navigated to; a model rebuilt by the designer shows on the next navigation.
+    protected override void OnParametersSet()
+    {
+        Model = Models.Current;
+        _entity = Model.FindEntity(EntityId);
+    }
 }

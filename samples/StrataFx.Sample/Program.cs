@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using StrataFx.Blazor;
+using StrataFx.Designer;
 using StrataFx.EFCore;
 using StrataFx.Hosting;
 using StrataFx.Identity;
@@ -27,7 +28,11 @@ builder.Services.AddStrataFx(fx =>
     // SalesModule defines the SalesViewer and SalesManager roles; Admin may do everything.
     fx.UseAspNetCoreIdentity<IdentityUser>()
         .AddEntityFrameworkStores<SampleDbContext>();
-    fx.UsePermissionPolicy(policy => policy.Role("Admin").AllowAll());
+    fx.UsePermissionPolicy(policy => policy.Role("Admin").AllowAll().AllowModelDesigner());
+
+    // The model designer at /strata/designer, for Admin only. It saves to model.json in development and to the
+    // database elsewhere, and the app picks up the changes without a restart.
+    fx.AddModelDesigner();
 });
 builder.Services.AddStrataFxBlazor();
 
@@ -53,7 +58,7 @@ app.UseAntiforgery();
 app.MapStaticAssets().AllowAnonymous();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
-    .AddAdditionalAssemblies(StrataFxBlazorExtensions.PagesAssembly, StrataFxIdentityExtensions.PagesAssembly);
+    .AddAdditionalAssemblies(StrataFxBlazorExtensions.PagesAssembly, StrataFxIdentityExtensions.PagesAssembly, StrataFxDesignerExtensions.PagesAssembly);
 app.MapStrataFxIdentity();
 
 app.Run();

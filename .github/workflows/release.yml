@@ -80,7 +80,7 @@ jobs:
         shell: bash
         run: |
           ls -l artifacts
-          for id in StrataFx.Core StrataFx.EFCore StrataFx.Blazor StrataFx.Identity StrataFx.Templates; do
+          for id in StrataFx.Core StrataFx.EFCore StrataFx.Blazor StrataFx.Identity StrataFx.Designer StrataFx.Templates; do
             test -f "artifacts/$id.${{ steps.version.outputs.version }}.nupkg" || { echo "::error::$id package missing"; exit 1; }
           done
 

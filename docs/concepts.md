@@ -15,10 +15,19 @@ The model is built in layers (strata). Each one can override the one below:
    `fx.AddModelLayer(...)`).
 3. **JSON**: deployment or admin overrides (`model.json`, `fx.AddJsonModelLayer(path)`), no recompile needed.
    Unknown entity or property names stop the app at startup, so typos are caught.
-4. **User**: each signed-in user's list layouts (columns, order, widths, sort, page size), saved in the database.
+4. **Database**: changes saved by the [model designer](#model-designer) outside development
+   (`fx.AddDatabaseModelLayer()`, added by `fx.AddModelDesigner()`). Always applied after every other layer.
+5. **User**: each signed-in user's list layouts (columns, order, widths, sort, page size), saved in the database.
 
-Layers 1 to 3 build one shared model at startup (`AppModel`). The user stratum never changes it: it is applied when
-a list opens, so every user sees the lower layers plus their own choices.
+Layers 1 to 4 build one shared model (`AppModel`). The user stratum never changes it: it is applied when a list
+opens, so every user sees the lower layers plus their own choices.
+
+The model is built at startup by `IAppModelProvider` and can be rebuilt while the app runs
+(`IAppModelProvider.Rebuild()`, which the designer calls after saving). A rebuild makes a new `AppModel` and swaps it
+in; a model that a page is using is never changed. If a layer fails (a typo in model.json), the app keeps the last
+good model and `IAppModelProvider.LastError` says why. Components that inject `AppModel` get the model current when
+they are created; StrataFx's pages read `IAppModelProvider.Current` when they are navigated to, and the navigation
+menu and `<StrataAppTitle />` update at once (subscribe to `IAppModelProvider.Changed` to do the same).
 
 ## Entities
 
@@ -155,6 +164,48 @@ remembered too, and **Reset to default** drops the user's layout.
   session only, never shared with other visitors.
 - Users in the `Admin` role also get **Save as default for everyone**, a shared layer between model.json and each
   user's own layout (change the role with `fx.UserSettings.SharedDefaultsRole`, or set it to `null` to turn it off).
+
+## Model designer
+
+`StrataFx.Designer` adds an in-app designer for the model, for admins:
+
+```csharp
+builder.Services.AddStrataFx(fx =>
+{
+    // ...
+    fx.UsePermissionPolicy(policy => policy.Role("Admin").AllowAll().AllowModelDesigner());
+    fx.AddModelDesigner(); // optional: o => o.SaveTo = ModelDesignerSaveTarget.Database
+});
+// Router and MapRazorComponents: add StrataFxDesignerExtensions.PagesAssembly to the additional assemblies.
+// App bar: <StrataDesignerLink /> (shown only to users who may use the designer).
+```
+
+- **The page** (`/strata/designer`): a tree of navigation groups, entities and properties (with a search box) and,
+  for the selected node, every value a model layer can change: the same settings as model.json. Each value shows the
+  layer it comes from ("Classes and attributes", "Sales defaults (SalesModule)", "model.json", "Database") and, when
+  the designer's layer sets it, a reset to the value of the layer below. Values that can't be changed safely are
+  disabled with the reason (the key's read-only flag, foreign keys, properties without a public setter, values set
+  by a later layer). **Preview** shows the real list and form for the selected entity with the unsaved changes and
+  records from the database, read-only. **Changes** lists the changed values and the exact text a save writes.
+- **Where it saves**: in Development, the JSON layer file (the last `fx.AddJsonModelLayer` file, or
+  `o.JsonFile`). Only the changed values are written: comments, formatting, key order and keys the designer doesn't
+  manage stay as they were, new values are inserted in model order next to their siblings, and empty objects are
+  removed. Everywhere else (where the app's files are usually read-only or replaced on deploy), the database layer:
+  JSON in the user settings store (`IUserSettingsStore`, user `*`, key `strata/model`), so it needs
+  `fx.AddEntityFrameworkCoreUserSettings<T>()` to survive restarts. Choose with `o.SaveTo`.
+- **Applying changes**: a save writes the layer and rebuilds the model; everyone gets the new model right away (on
+  their next navigation; menus and the title update at once). On other servers of a web farm the database layer is
+  read at startup. A save that would not build is refused; if model.json was changed by someone else meanwhile, the
+  save is refused rather than overwriting it.
+- **Errors**: a model.json with an unknown name or invalid JSON (edited by hand) is shown in the designer, which
+  can't save until it is fixed; **Reload** re-reads the layers. A database layer that no longer applies (e.g. a
+  property was renamed in code) is set aside at startup with an error in the log and in the designer, and the next
+  save replaces it.
+- **Security**: only users with the model designer permission (`AllowModelDesigner()`) can open the page, read the
+  layers or save, checked on the server. `AllowAll()` doesn't include it, and without a permission policy nobody
+  has it.
+- Users' own list layouts still apply on top of the model, so a column hidden in the designer stays visible for a
+  user who chose to show it.
 
 ## Editors
 

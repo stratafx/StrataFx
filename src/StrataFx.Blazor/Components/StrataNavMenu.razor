@@ -1,10 +1,11 @@
 @* Navigation generated from the application model: one group per NavigationGroup, one link per readable entity. *@
-@inject AppModel Model
+@implements IDisposable
+@inject IAppModelProvider Models
 @inject IPermissionService Permissions
 
 <MudNavMenu>
     @ChildContent
-    @foreach (var group in Model.NavigationGroups())
+    @foreach (var group in Models.Current.NavigationGroups())
     {
         var entities = group.Where(e => Permissions.IsAllowed(e.ClrType, EntityOperation.Read)).ToList();
         if (entities.Count == 0) continue;
@@ -23,4 +24,11 @@
 @code {
     /// <summary>Extra links shown above the generated groups (e.g. Home).</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    // Shows a model rebuilt by the designer right away.
+    protected override void OnInitialized() => Models.Changed += OnModelChanged;
+
+    private void OnModelChanged(AppModel model) => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Models.Changed -= OnModelChanged;
 }

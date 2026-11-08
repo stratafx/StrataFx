@@ -17,6 +17,7 @@ public sealed class AppModelBuilder
 
     private readonly List<Type> _entityTypes = [];
     private readonly List<IModelLayer> _layers = [];
+    private readonly Dictionary<IModelLayer, string> _origins = new(ReferenceEqualityComparer.Instance);
 
     public string Title { get; set; } = "StrataFx App";
 
@@ -49,7 +50,23 @@ public sealed class AppModelBuilder
         return this;
     }
 
-    public AppModel Build()
+    /// <summary>Who added a layer, e.g. the module's name. Shown with the layer's name by the designer.</summary>
+    public string? OriginOf(IModelLayer layer) => _origins.GetValueOrDefault(layer);
+
+    internal void SetOrigin(IModelLayer layer, string origin) => _origins.TryAdd(layer, origin);
+
+    /// <summary>The layer's name, with the module that added it: "Sales defaults (SalesModule)".</summary>
+    public string Describe(IModelLayer layer) => OriginOf(layer) is { } origin ? $"{layer.Name} ({origin})" : layer.Name;
+
+    public AppModel Build() => Build(_layers);
+
+    /// <summary>
+    /// Builds a model with the given layers instead of <see cref="Layers"/> (e.g. with an unsaved designer layer in
+    /// place of a file), optionally recording which layer set each value. Every call builds a new model, so models
+    /// that are in use are never changed.
+    /// </summary>
+    /// <exception cref="ModelLayerException">A layer failed, e.g. a JSON layer names an unknown property.</exception>
+    public AppModel Build(IEnumerable<IModelLayer> layers, ModelProvenance? provenance = null)
     {
         var entities = new List<EntityModel>();
         var byType = new Dictionary<Type, EntityModel>();
@@ -71,8 +88,19 @@ public sealed class AppModelBuilder
             LinkCollections(entity);
 
         var model = new AppModel(Title, entities);
-        foreach (var layer in _layers)
-            layer.Apply(model);
+        provenance?.Record(ModelProvenance.CodeLayer, model);
+        foreach (var layer in layers)
+        {
+            try
+            {
+                layer.Apply(model);
+            }
+            catch (Exception ex) when (ex is not ModelLayerException)
+            {
+                throw new ModelLayerException(layer.Name, ex);
+            }
+            provenance?.Record(Describe(layer), model);
+        }
         return model;
     }
 

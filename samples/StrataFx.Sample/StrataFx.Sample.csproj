@@ -5,6 +5,7 @@
     <ProjectReference Include="..\..\src\StrataFx.EFCore\StrataFx.EFCore.csproj" />
     <ProjectReference Include="..\..\src\StrataFx.Blazor\StrataFx.Blazor.csproj" />
     <ProjectReference Include="..\..\src\StrataFx.Identity\StrataFx.Identity.csproj" />
+    <ProjectReference Include="..\..\src\StrataFx.Designer\StrataFx.Designer.csproj" />
   </ItemGroup>
 
   <ItemGroup>

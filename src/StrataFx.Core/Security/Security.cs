@@ -52,6 +52,19 @@ public sealed class ClaimsPrincipalUser(ClaimsPrincipal principal) : ICurrentUse
 public interface IPermissionService
 {
     bool IsAllowed(Type entityType, EntityOperation operation);
+
+    /// <summary>
+    /// True when the user has a named permission such as <see cref="StrataPermissions.ModelDesigner"/>. Named permissions
+    /// are only ever granted explicitly by a <see cref="PermissionPolicy"/>, never by allow-all.
+    /// </summary>
+    bool HasPermission(string permission) => false;
+}
+
+/// <summary>Named permissions that are not about an entity type.</summary>
+public static class StrataPermissions
+{
+    /// <summary>Open the model designer and save model changes. Grant it with <see cref="RolePermissions.AllowModelDesigner"/>.</summary>
+    public const string ModelDesigner = "StrataFx.ModelDesigner";
 }
 
 public static class PermissionServiceExtensions
@@ -63,6 +76,15 @@ public static class PermissionServiceExtensions
     }
 }
 
+public static class PermissionServiceNamedExtensions
+{
+    public static void Demand(this IPermissionService permissions, string permission)
+    {
+        if (!permissions.HasPermission(permission))
+            throw new UnauthorizedAccessException($"You do not have the {permission} permission.");
+    }
+}
+
 public sealed class StrataAccessDeniedException(Type entityType, EntityOperation operation)
     : UnauthorizedAccessException($"You do not have permission to {operation.ToString().ToLowerInvariant()} {entityType.Name} records.")
 {
@@ -70,10 +92,14 @@ public sealed class StrataAccessDeniedException(Type entityType, EntityOperation
     public EntityOperation Operation { get; } = operation;
 }
 
-/// <summary>Allows everything. The default until a policy is configured.</summary>
+/// <summary>
+/// Allows every operation on every entity type. The default until a policy is configured. Named permissions such as
+/// the model designer are not granted: they need a policy.
+/// </summary>
 public sealed class AllowAllPermissionService : IPermissionService
 {
     public bool IsAllowed(Type entityType, EntityOperation operation) => true;
+    public bool HasPermission(string permission) => false;
 }
 
 /// <summary>
@@ -111,11 +137,18 @@ public sealed class PermissionPolicy
         }
         return (granted & operation) == operation;
     }
+
+    /// <summary>True when one of the user's roles was granted the named permission.</summary>
+    public bool HasPermission(ICurrentUser user, string permission) =>
+        _roles.Values.Any(role => role.HasPermission(permission) && (user.IsAuthenticated
+            ? user.IsInRole(role.Name)
+            : string.Equals(role.Name, PermissionPolicy.AnonymousRole, StringComparison.OrdinalIgnoreCase)));
 }
 
 public sealed class RolePermissions(string name)
 {
     private readonly Dictionary<Type, EntityOperation> _types = [];
+    private readonly HashSet<string> _permissions = new(StringComparer.OrdinalIgnoreCase);
     private EntityOperation _allTypes;
 
     public string Name { get; } = name;
@@ -135,6 +168,18 @@ public sealed class RolePermissions(string name)
         return this;
     }
 
+    /// <summary>Grants a named permission (see <see cref="StrataPermissions"/>). <see cref="AllowAll"/> does not include these.</summary>
+    public RolePermissions Grant(string permission)
+    {
+        _permissions.Add(permission);
+        return this;
+    }
+
+    /// <summary>Lets the role open the model designer and save model changes.</summary>
+    public RolePermissions AllowModelDesigner() => Grant(StrataPermissions.ModelDesigner);
+
+    public bool HasPermission(string permission) => _permissions.Contains(permission);
+
     internal EntityOperation GetGranted(Type entityType) => _allTypes | _types.GetValueOrDefault(entityType);
 }
 
@@ -142,4 +187,5 @@ public sealed class RolePermissions(string name)
 public sealed class PolicyPermissionService(PermissionPolicy policy, ICurrentUser user) : IPermissionService
 {
     public bool IsAllowed(Type entityType, EntityOperation operation) => policy.IsAllowed(user, entityType, operation);
+    public bool HasPermission(string permission) => policy.HasPermission(user, permission);
 }

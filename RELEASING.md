@@ -87,7 +87,7 @@ git push origin v0.1.0
 ```
 
 Watch **Actions** → **Release**. If you set up a required reviewer, approve the `nuget` deployment. The workflow
-pushes the five packages (and the four libraries' symbol packages) with `--skip-duplicate` (so a re-run doesn't fail on packages
+pushes the six packages (and the five libraries' symbol packages) with `--skip-duplicate` (so a re-run doesn't fail on packages
 that are already there), then creates the GitHub release `v0.1.0` with the packages attached.
 
 If the publish job fails on credentials, fix the policy or secret and use **Re-run failed jobs**; don't create a
@@ -96,7 +96,7 @@ new tag.
 ### 8. Check the packages
 
 1. <https://www.nuget.org/profiles/stratafx> lists StrataFx.Core, StrataFx.EFCore, StrataFx.Blazor,
-   StrataFx.Identity and StrataFx.Templates. New packages are validated and indexed first, which can take from a
+   StrataFx.Identity, StrataFx.Designer and StrataFx.Templates. New packages are validated and indexed first, which can take from a
    few minutes to about an hour before they appear in search and restore.
 2. On each package page: the README renders, the icon shows, the license is MIT and the dependencies are as
    expected (StrataFx.* 0.1.0, EF Core and MudBlazor). Open a library package in NuGet Package Explorer

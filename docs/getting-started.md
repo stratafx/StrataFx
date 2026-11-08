@@ -163,7 +163,9 @@ the collection uses with `[InverseProperty]`.
 ## 6. Customize with model.json
 
 `model.json` is a model layer applied on top of the classes. Use it for what deployments or admins change, without
-recompiling (restart the app to apply). Entities are named by their class name in lower case, properties by their
+recompiling. Edit it by hand and restart, or use the model designer (`StrataFx.Designer`, see
+[concepts](concepts.md#model-designer)), which edits this file in place, keeps your comments and applies changes
+without a restart. Entities are named by their class name in lower case, properties by their
 C# name:
 
 ```json

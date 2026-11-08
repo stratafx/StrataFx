@@ -24,7 +24,7 @@
               RowsPerPage="@_layout.PageSize"
               Elevation="@(Embedded ? 0 : 1)"
               Outlined="@Embedded"
-              RowStyle="cursor: pointer">
+              RowStyle="@(IsPreview ? null : "cursor: pointer")">
         <ToolBarContent>
             <MudText Typo="@(Embedded ? Typo.subtitle1 : Typo.h6)">@(Title ?? Entity.PluralCaption)</MudText>
             <MudSpacer />
@@ -38,6 +38,8 @@
                           Clearable="true"
                           Class="mt-0 mr-2"
                           Style="max-width: 280px" />
+            @if (!IsPreview)
+            {
             <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" @bind-Open="_chooserOpen" Class="mr-2">
                 <ActivatorContent>
                     <MudTooltip Text="Columns">
@@ -90,6 +92,7 @@
                 </ChildContent>
             </MudMenu>
             <CommandBar Entity="Entity" Target="CommandTarget.List" Selection="@_selected.ToList()" Executed="OnCommandExecutedAsync" />
+            }
             @if (_canDelete && _selected.Count > 0)
             {
                 <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteSelectedAsync">
@@ -198,6 +201,16 @@
     /// </summary>
     [Parameter] public string? ViewKey { get; set; }
 
+    /// <summary>
+    /// A read-only preview (the model designer): the model's columns, no saved layouts, commands, creating, deleting or
+    /// opening records. Lists inside a previewed form are previews too.
+    /// </summary>
+    [Parameter] public bool Preview { get; set; }
+
+    [CascadingParameter(Name = StrataPreview.CascadingName)] public bool InPreview { get; set; }
+
+    private bool IsPreview => Preview || InPreview;
+
     private string? ReturnUrl => Embedded ? Navigation.ToBaseRelativePath(Navigation.Uri) : null;
 
     private string NewUrl => StrataRoutes.WithQuery(StrataRoutes.New(Entity),
@@ -210,25 +223,33 @@
     private bool IsDefault => _layout is null || _default is null || _layout.SameAs(_default);
 
     private string? _shownFor;
+    private EntityModel? _shownEntity;
 
     protected override async Task OnParametersSetAsync()
     {
         // The parent form re-renders on every edit; only reset when the list actually shows something else.
         var shownFor = (ViewKey ?? Entity.Id) + "|" + Entity.Id + "|" + string.Join("|", Filters.Select(f => $"{f.PropertyName}={f.Value}"));
-        if (shownFor == _shownFor) return;
+        if (shownFor == _shownFor && ReferenceEquals(Entity, _shownEntity)) return; // a rebuilt model is a new entity
         _shownFor = shownFor;
+        _shownEntity = Entity;
 
         await SaveNowAsync(); // a pending change to the list shown before
-        _canCreate = Permissions.IsAllowed(Entity.ClrType, EntityOperation.Create);
-        _canDelete = Permissions.IsAllowed(Entity.ClrType, EntityOperation.Delete);
+        _canCreate = !IsPreview && Permissions.IsAllowed(Entity.ClrType, EntityOperation.Create);
+        _canDelete = !IsPreview && Permissions.IsAllowed(Entity.ClrType, EntityOperation.Delete);
         _selected = [];
         _search = null;
+        if (IsPreview)
+        {
+            _layout = _default = Resolve(null); // what the model says, without anyone's saved columns
+            _tableVersion++;
+            return;
+        }
         await LoadLayoutAsync(ListLayouts.SettingKey(ViewKey ?? Entity.Id));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
+        if (!firstRender || IsPreview) return;
         try
         {
             _self = DotNetObjectReference.Create(this);
@@ -390,6 +411,7 @@
 
     private void ScheduleSave()
     {
+        if (IsPreview) return;
         _savePending = true;
         _saveDelay?.Cancel();
         var delay = _saveDelay = new CancellationTokenSource();
@@ -489,7 +511,7 @@
 
     private void Open(object? item)
     {
-        if (item is not null)
+        if (item is not null && !IsPreview)
             Navigation.NavigateTo(StrataRoutes.WithQuery(StrataRoutes.Detail(Entity, item), (StrataRoutes.ReturnUrlParameter, ReturnUrl)));
     }
 

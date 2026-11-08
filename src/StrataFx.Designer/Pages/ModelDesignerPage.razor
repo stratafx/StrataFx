@@ -1,0 +1,452 @@
+@page "/strata/designer"
+@* The model designer: browse the model, change captions, navigation, columns and forms, preview them and save. *@
+@inject ModelDesigner Designer
+@inject IAppModelProvider Models
+@inject PropertyEditorRegistry Editors
+@inject IDataStore Data
+@inject IPermissionService Permissions
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Model designer · @Models.Current.Title</PageTitle>
+
+@if (!Designer.IsAllowed)
+{
+    <MudAlert Severity="Severity.Warning">You don't have permission to use the model designer.</MudAlert>
+}
+else if (_session is null)
+{
+    @if (_openError is not null)
+    {
+        <MudAlert Severity="Severity.Error">The designer could not open: @_openError</MudAlert>
+    }
+    else
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+}
+else
+{
+    <NavigationLock ConfirmExternalNavigation="@_session.HasChanges" OnBeforeInternalNavigation="ConfirmLeaveAsync" />
+
+    <div class="strata-designer">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Outlined.DesignServices" />
+            <MudText Typo="Typo.h5">Model designer</MudText>
+            <MudTooltip Text="@SaveTargetTooltip">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@SaveTargetIcon">Saves to @SaveTargetName</MudChip>
+            </MudTooltip>
+            <MudSpacer />
+            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Outlined.Refresh" OnClick="ReloadAsync" Disabled="_busy">Reload</MudButton>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.Undo" OnClick="DiscardAsync" Disabled="@(!_session.HasChanges || _busy)">Discard</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="@(!_session.CanSave || _busy)">
+                Save@(_session.HasChanges ? $" ({_session.Changes.Count})" : "")
+            </MudButton>
+        </MudStack>
+
+        @if (Models.LastError is { } buildError)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">
+                The model doesn't build, so the app keeps running on the last good model: @buildError.Message
+            </MudAlert>
+        }
+        @if (_session.LoadError is { } loadError)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@loadError Fix it by hand, then select Reload.</MudAlert>
+        }
+        @if (_session.Problems.Count > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                <div>@_session.Target.Layer.Name has entries the model doesn't know@(_session.Target.KeepsComments ? "; fix or remove them by hand, then select Reload" : "; saving removes them"):</div>
+                @foreach (var problem in _session.Problems) { <div>· @problem</div> }
+            </MudAlert>
+        }
+        @if (_session.BuildError is { } draftError)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">These changes don't build: @draftError</MudAlert>
+        }
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="4" lg="3">
+                <MudPaper Outlined="true" Class="pa-2 strata-designer-tree">
+                    <MudTextField T="string" @bind-Value="_search" Immediate="true" DebounceInterval="200" Placeholder="Search entities and properties"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
+                    <MudTreeView T="string" SelectedValue="_selected" SelectedValueChanged="SelectAsync" Hover="true" Dense="true" ExpandOnClick="false">
+                        <MudTreeViewItem T="string" Value="@AppNode" Text="Application" Icon="@Icons.Material.Outlined.Apps" />
+                        @foreach (var group in Groups())
+                        {
+                            <MudTreeViewItem T="string" Value="@("g:" + group.Key)" Text="@group.Key" Icon="@Icons.Material.Outlined.Folder"
+                                             Expanded="@IsExpanded("g:" + group.Key, true)" ExpandedChanged="@(v => _expanded["g:" + group.Key] = v)">
+                                @foreach (var (entity, properties) in group)
+                                {
+                                    var entityNode = "e:" + entity.Id;
+                                    <MudTreeViewItem T="string" Value="@entityNode" Text="@entity.PluralCaption" Icon="@(entity.Icon ?? Icons.Material.Outlined.TableRows)"
+                                                     EndText="@(_session.Changes.Any(c => c.Key.Entity == entity.Id) ? "•" : null)" EndTextClass="mud-warning-text"
+                                                     Expanded="@IsExpanded(entityNode, Searching)" ExpandedChanged="@(v => _expanded[entityNode] = v)">
+                                        @foreach (var property in properties)
+                                        {
+                                            <MudTreeViewItem T="string" Value="@("p:" + entity.Id + "." + property.Name)" Text="@property.Caption"
+                                                             Icon="@DesignerIcons.ForProperty(property)"
+                                                             EndText="@(_session.Changes.Any(c => c.Key.Entity == entity.Id && c.Key.Property == property.Name) ? "•" : null)"
+                                                             EndTextClass="mud-warning-text" />
+                                        }
+                                    </MudTreeViewItem>
+                                }
+                            </MudTreeViewItem>
+                        }
+                    </MudTreeView>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="8" lg="9">
+                <MudTabs ActivePanelIndex="_tab" ActivePanelIndexChanged="OnTabChangedAsync" Outlined="true" Rounded="true" TabPanelsClass="pa-4">
+                    <MudTabPanel Text="Settings" Icon="@Icons.Material.Outlined.Tune">
+                        @RenderSettings()
+                    </MudTabPanel>
+                    <MudTabPanel Text="Preview" Icon="@Icons.Material.Outlined.Visibility">
+                        @RenderPreview()
+                    </MudTabPanel>
+                    <MudTabPanel Text="@($"Changes ({_session.Changes.Count})")" Icon="@Icons.Material.Outlined.Difference">
+                        @RenderChanges()
+                    </MudTabPanel>
+                </MudTabs>
+            </MudItem>
+        </MudGrid>
+    </div>
+}
+
+@code {
+    private const string AppNode = "app";
+
+    private ModelDesignSession? _session;
+    private string? _openError;
+    private string? _selected = AppNode;
+    private string? _search;
+    private int _tab;
+    private bool _busy;
+    private bool _previewForm;
+    private string? _previewKey;
+    private string? _previewKeyFor;
+    private readonly Dictionary<string, bool> _expanded = [];
+    private readonly Dictionary<ModelValueKey, string> _errors = [];
+
+    private AppModel Model => _session!.Model;
+    private bool Searching => !string.IsNullOrWhiteSpace(_search);
+
+    private bool IsFile => _session!.Target is JsonFileDesignTarget;
+    private string SaveTargetName => IsFile ? _session!.Target.Layer.Name : "the database";
+    private string SaveTargetIcon => IsFile ? Icons.Material.Outlined.Description : Icons.Material.Outlined.Storage;
+    private string SaveTargetTooltip => IsFile
+        ? $"{_session!.Target.Description}. Only changed values are written; comments and formatting stay."
+        : "The database model layer. It applies on top of the code and JSON layers, on this server right away and on other servers when they restart.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Designer.IsAllowed) return;
+        try
+        {
+            _session = await Designer.OpenAsync();
+        }
+        catch (Exception ex)
+        {
+            _openError = ErrorText.For(ex);
+        }
+    }
+
+    private bool IsExpanded(string node, bool fallback) => _expanded.TryGetValue(node, out var expanded) ? expanded || Searching : fallback;
+
+    // ---- the tree ----
+
+    private IEnumerable<IGrouping<string, (EntityModel Entity, List<PropertyModel> Properties)>> Groups()
+    {
+        var text = _search?.Trim();
+        bool Matches(string? value) => string.IsNullOrEmpty(text) || value?.Contains(text, StringComparison.OrdinalIgnoreCase) == true;
+
+        return Model.Entities
+            .Select(e =>
+            {
+                var entityMatches = Matches(e.Caption) || Matches(e.PluralCaption) || Matches(e.Id);
+                var properties = e.Properties.OrderBy(p => p.Order).Where(p => entityMatches || Matches(p.Caption) || Matches(p.Name)).ToList();
+                return (Entity: e, Properties: properties, Show: entityMatches || properties.Count > 0);
+            })
+            .Where(x => x.Show)
+            .OrderBy(x => x.Entity.VisibleInNavigation ? 0 : 1)
+            .ThenBy(x => x.Entity.NavigationGroup)
+            .ThenBy(x => x.Entity.Order)
+            .ThenBy(x => x.Entity.PluralCaption)
+            .GroupBy(x => x.Entity.VisibleInNavigation ? x.Entity.NavigationGroup : "Not in navigation", x => (x.Entity, x.Properties));
+    }
+
+    private async Task SelectAsync(string? node)
+    {
+        if (node is null || node.StartsWith("g:", StringComparison.Ordinal)) return; // groups only fold
+        _selected = node;
+        _errors.Clear();
+        await LoadPreviewKeyAsync();
+    }
+
+    private EntityModel? SelectedEntity => _selected switch
+    {
+        ['e', ':', .. var id] => Model.FindEntity(id),
+        ['p', ':', .. var path] => Model.FindEntity(path[..path.IndexOf('.')]),
+        _ => null,
+    };
+
+    private PropertyModel? SelectedProperty => _selected is ['p', ':', .. var path]
+        ? Model.FindEntity(path[..path.IndexOf('.')])?.FindProperty(path[(path.IndexOf('.') + 1)..])
+        : null;
+
+    // ---- settings ----
+
+    private RenderFragment RenderSettings() => __builder =>
+    {
+        var entity = SelectedEntity;
+        var property = SelectedProperty;
+        if (_selected == AppNode)
+        {
+            <MudText Typo="Typo.h6">Application</MudText>
+            <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">Settings for the whole app.</MudText>
+            @RenderValue(ModelValueKey.ForApp(ModelSettings.TitleKey))
+        }
+        else if (property is not null)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@DesignerIcons.ForProperty(property)" />
+                <MudText Typo="Typo.h6">@property.Caption</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
+                @entity!.ClrType.Name.@property.Name · @DesignerIcons.KindText(property) · @Friendly(property.PropertyType)
+            </MudText>
+            @foreach (var setting in ModelSettings.Property.Where(s => s.AppliesTo(property)))
+            {
+                @RenderValue(ModelValueKey.For(property, setting.Key))
+            }
+        }
+        else if (entity is not null)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@(entity.Icon ?? Icons.Material.Outlined.TableRows)" />
+                <MudText Typo="Typo.h6">@entity.Caption</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
+                @entity.ClrType.FullName · id "@entity.Id" · @entity.Properties.Count properties
+            </MudText>
+            @foreach (var setting in ModelSettings.Entity)
+            {
+                @RenderValue(ModelValueKey.For(entity, setting.Key))
+            }
+        }
+        else
+        {
+            <MudText>Select the application, an entity or a property.</MudText>
+        }
+    };
+
+    private RenderFragment RenderValue(ModelValueKey key) => __builder =>
+    {
+        <DesignerValueEditor @key="key" Info="@_session!.Describe(key)" Choices="@ChoicesFor(key)" IsIcon="@(key.Setting == "icon")"
+                             Error="@_errors.GetValueOrDefault(key)"
+                             OnChange="@(value => SetAsync(key, value))" OnReset="@(() => ResetAsync(key))" />
+    };
+
+    private IReadOnlyList<(string, string)>? ChoicesFor(ModelValueKey key) => key.Setting switch
+    {
+        ModelSettings.CollectionKindKey => [(nameof(CollectionKind.Related), "Related records (separate list)"), (nameof(CollectionKind.Owned), "Owned items (edited in the form)")],
+        ModelSettings.LookupPropertyKey => Model.FindEntity(key.Entity!)!.Properties
+            .Where(p => p.EditorKind is not (EditorKind.Collection or EditorKind.Reference))
+            .Select(p => (p.Name, p.Caption == p.Name ? p.Name : $"{p.Caption} ({p.Name})"))
+            .ToList(),
+        ModelSettings.EditorKey => [("", "Automatic (the editor for the type)"), .. Editors.EditorNames.Select(n => (n, n))],
+        _ => null,
+    };
+
+    private Task SetAsync(ModelValueKey key, object? value)
+    {
+        if (_session!.Set(key, value) is { } error) _errors[key] = error;
+        else _errors.Remove(key);
+        return Task.CompletedTask;
+    }
+
+    private Task ResetAsync(ModelValueKey key)
+    {
+        _session!.Reset(key);
+        _errors.Remove(key);
+        return Task.CompletedTask;
+    }
+
+    private static string Friendly(Type type) =>
+        Nullable.GetUnderlyingType(type) is { } inner ? Friendly(inner) + "?"
+        : type.IsGenericType ? $"{type.Name[..type.Name.IndexOf('`')]}<{string.Join(", ", type.GetGenericArguments().Select(Friendly))}>"
+        : type.Name;
+
+    // ---- preview ----
+
+    private RenderFragment RenderPreview() => __builder =>
+    {
+        var entity = SelectedEntity;
+        if (entity is null)
+        {
+            <MudText>Select an entity or one of its properties to preview its list and form with your changes.</MudText>
+            return;
+        }
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                <MudButton Color="@(_previewForm ? Color.Default : Color.Primary)" OnClick="@(() => ShowFormAsync(false))">List</MudButton>
+                <MudButton Color="@(_previewForm ? Color.Primary : Color.Default)" OnClick="@(() => ShowFormAsync(true))">Form</MudButton>
+            </MudButtonGroup>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Read-only preview with records from the database and the unsaved changes. Users' own column choices are not applied.</MudText>
+        </MudStack>
+        if (!Permissions.IsAllowed(entity.ClrType, EntityOperation.Read))
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">You may not read @entity.PluralCaption.ToLowerInvariant(), so there is nothing to preview.</MudAlert>
+        }
+        else if (!_previewForm)
+        {
+            <EntityListView @key="@($"{_session!.Version}:{entity.Id}")" Entity="entity" Preview="true" />
+        }
+        else if (_previewKey is null)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">There are no @entity.PluralCaption.ToLowerInvariant() to show in the form yet.</MudAlert>
+        }
+        else
+        {
+            <EntityDetailView @key="@($"{_session!.Version}:{entity.Id}:{_previewKey}")" Entity="entity" Key="@_previewKey" Preview="true" />
+        }
+    };
+
+    private async Task ShowFormAsync(bool form)
+    {
+        _previewForm = form;
+        await LoadPreviewKeyAsync();
+    }
+
+    private async Task OnTabChangedAsync(int index)
+    {
+        _tab = index;
+        await LoadPreviewKeyAsync();
+    }
+
+    /// <summary>The form preview shows the first record of the selected entity.</summary>
+    private async Task LoadPreviewKeyAsync()
+    {
+        var entity = SelectedEntity;
+        if (!_previewForm || entity is null || _previewKeyFor == entity.Id) return;
+        _previewKeyFor = entity.Id;
+        _previewKey = null;
+        if (!Permissions.IsAllowed(entity.ClrType, EntityOperation.Read)) return;
+        try
+        {
+            var page = await Data.QueryAsync(entity, new QueryRequest { Take = 1 });
+            _previewKey = page.Items.Count > 0 ? entity.FormatKey(page.Items[0]) : null;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+        }
+    }
+
+    // ---- changes ----
+
+    private RenderFragment RenderChanges() => __builder =>
+    {
+        if (!_session!.HasChanges)
+        {
+            <MudText>No unsaved changes. Changes you make in Settings are listed here, with the text a save writes.</MudText>
+            return;
+        }
+        <MudSimpleTable Dense="true" Outlined="true" Class="mb-4">
+            <thead><tr><th>Value</th><th>Saved</th><th>After saving</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var change in _session.Changes)
+                {
+                    <tr>
+                        <td><code>@change.Key</code></td>
+                        <td>@(change.WasSet ? ModelLayerDocument.ToJsonLiteral(change.OldValue) : "not set")</td>
+                        <td>@(change.IsSet ? ModelLayerDocument.ToJsonLiteral(change.NewValue) : $"not set ({_session.Describe(change.Key).Source})")</td>
+                        <td><MudIconButton Icon="@Icons.Material.Outlined.Undo" Size="Size.Small" aria-label="Undo this change" OnClick="@(() => UndoAsync(change))" /></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+        <MudText Typo="Typo.subtitle2" Class="mb-1">@(IsFile ? $"What changes in {_session.Target.Layer.Name}" : "What the database layer will hold")</MudText>
+        <pre class="strata-designer-diff">@foreach (var line in TextDiff.Hunks(TextDiff.Lines(_session.SavedText, _session.RenderedText)))
+        {
+            if (line is not { } l) { <span class="skip">⋯</span>@("\n") }
+            else { <span class="@(l.Kind switch { TextDiffKind.Added => "add", TextDiffKind.Removed => "del", _ => "same" })">@(l.Kind switch { TextDiffKind.Added => "+ ", TextDiffKind.Removed => "- ", _ => "  " })@l.Text</span>@("\n") }
+        }</pre>
+    };
+
+    private Task UndoAsync(ModelLayerChange change)
+    {
+        if (change.WasSet) _session!.Set(change.Key, change.OldValue);
+        else _session!.Reset(change.Key);
+        return Task.CompletedTask;
+    }
+
+    // ---- save, discard, reload ----
+
+    private async Task SaveAsync()
+    {
+        var count = _session!.Changes.Count;
+        var question = count == 0
+            ? $"Replace the stored model layer with the values that still apply?"
+            : $"Save {count} change{(count == 1 ? "" : "s")} to {SaveTargetName}? Everyone sees {(count == 1 ? "it" : "them")} right away.";
+        if (await Dialogs.ShowMessageBoxAsync("Save model changes", question, yesText: "Save", cancelText: "Cancel") != true) return;
+
+        _busy = true;
+        try
+        {
+            var result = await _session.SaveAsync();
+            if (result.Saved) Snackbar.Add($"Saved to {SaveTargetName}. The app uses the new model now.", Severity.Success);
+            else Snackbar.Add(result.Error ?? "Not saved.", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DiscardAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Discard changes", "Discard all unsaved changes?", yesText: "Discard", cancelText: "Cancel") != true) return;
+        _session!.Discard();
+        _errors.Clear();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_session!.HasChanges
+            && await Dialogs.ShowMessageBoxAsync("Reload", "Reload the model from its layers? Unsaved changes are lost.", yesText: "Reload", cancelText: "Cancel") != true)
+            return;
+        _busy = true;
+        try
+        {
+            // Picks up layer files edited by hand. A broken layer keeps the last good model and shows its error above.
+            Models.Rebuild();
+            await _session.ReloadAsync();
+            _errors.Clear();
+            _previewKeyFor = null;
+            await LoadPreviewKeyAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ErrorText.For(ex), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ConfirmLeaveAsync(LocationChangingContext context)
+    {
+        if (_session?.HasChanges != true) return;
+        var leave = await Dialogs.ShowMessageBoxAsync("Unsaved changes", "Leave the designer and lose your unsaved changes?", yesText: "Leave", cancelText: "Stay");
+        if (leave != true) context.PreventNavigation();
+    }
+}

@@ -53,7 +53,10 @@ public sealed class StrataFxBuilder
     {
         if (_modules.Any(m => m.GetType() == module.GetType())) return this;
         _modules.Add(module);
+        var layerCount = Model.Layers.Count;
         module.ConfigureModel(Model);
+        foreach (var layer in Model.Layers.Skip(layerCount))
+            Model.SetOrigin(layer, module.Name);
         module.ConfigureServices(this);
         if (_policy is not null) module.ConfigureSecurity(_policy);
         return this;
@@ -63,11 +66,35 @@ public sealed class StrataFxBuilder
     public StrataFxBuilder AddEntitiesFrom(Assembly assembly) { Model.AddEntitiesFrom(assembly); return this; }
     public StrataFxBuilder AddModelLayer(IModelLayer layer) { Model.AddLayer(layer); return this; }
 
-    /// <summary>Adds a JSON model layer if the file exists (so an optional overrides file can ship empty).</summary>
+    /// <summary>
+    /// Adds a JSON model layer read from a file. The file is read whenever the model is built, so changes apply on the
+    /// next rebuild (e.g. after the model designer saves). An optional file that doesn't exist is an empty layer.
+    /// </summary>
     public StrataFxBuilder AddJsonModelLayer(string path, bool optional = true)
     {
-        if (File.Exists(path)) Model.AddLayer(JsonModelLayer.FromFile(path));
-        else if (!optional) throw new FileNotFoundException("Model layer file not found.", path);
+        if (!optional && !File.Exists(path)) throw new FileNotFoundException("Model layer file not found.", path);
+        Model.AddLayer(new JsonFileModelLayer(path));
+        return this;
+    }
+
+    /// <summary>
+    /// The database model layer, when enabled with <see cref="AddDatabaseModelLayer"/>. It always runs after every
+    /// other model layer.
+    /// </summary>
+    public DatabaseModelLayer? DatabaseModelLayer { get; private set; }
+
+    /// <summary>
+    /// Adds the database model layer: model changes saved in the <see cref="IUserSettingsStore"/> (the model designer
+    /// saves there outside development). It runs after every other layer. Its content is read at startup by
+    /// <c>AddModelDesigner</c>, or call <see cref="DatabaseModelLayer.LoadAsync"/> and <see cref="IAppModelProvider.Rebuild"/> yourself.
+    /// </summary>
+    public StrataFxBuilder AddDatabaseModelLayer()
+    {
+        if (DatabaseModelLayer is null)
+        {
+            DatabaseModelLayer = new DatabaseModelLayer();
+            Services.AddSingleton(DatabaseModelLayer);
+        }
         return this;
     }
 
@@ -110,8 +137,10 @@ public sealed class StrataFxBuilder
 
     internal void Complete()
     {
-        var model = Model.Build();
-        Services.AddSingleton(model);
+        // Built now, so a broken layer stops the app at startup. Later rebuilds keep the last good model instead.
+        var provider = new AppModelProvider(Model, DatabaseModelLayer is null ? null : [DatabaseModelLayer]);
+        Services.AddSingleton<IAppModelProvider>(provider);
+        Services.AddTransient(sp => sp.GetRequiredService<IAppModelProvider>().Current);
         Services.TryAddScoped<ICurrentUser, AnonymousUser>();
         Services.AddScoped<EntityValidator>();
         Services.AddScoped<EntityChangeDispatcher>();

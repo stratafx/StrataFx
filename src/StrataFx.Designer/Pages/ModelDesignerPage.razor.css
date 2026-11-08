@@ -1,0 +1,74 @@
+.strata-designer ::deep .strata-designer-tree {
+    max-height: calc(100vh - 220px);
+    overflow: auto;
+}
+
+.strata-designer ::deep .strata-designer-value {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.strata-designer ::deep .strata-designer-value-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.strata-designer ::deep .strata-designer-value-source {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+    min-width: 170px;
+    padding-top: 8px;
+}
+
+.strata-designer ::deep .strata-designer-note {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary);
+    margin: 2px 2px 0;
+}
+
+.strata-designer-diff {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    padding: 8px 0;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    overflow-x: auto;
+    white-space: pre;
+}
+
+.strata-designer-diff span {
+    display: inline-block;
+    min-width: 100%;
+    padding: 0 12px;
+}
+
+.strata-designer-diff .add {
+    background: color-mix(in srgb, var(--mud-palette-success) 16%, transparent);
+}
+
+.strata-designer-diff .del {
+    background: color-mix(in srgb, var(--mud-palette-error) 16%, transparent);
+}
+
+.strata-designer-diff .skip {
+    color: var(--mud-palette-text-secondary);
+}
+
+@media (max-width: 600px) {
+    .strata-designer ::deep .strata-designer-value {
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .strata-designer ::deep .strata-designer-value-source {
+        padding-top: 0;
+    }
+}

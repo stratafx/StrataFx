@@ -1,0 +1,102 @@
+@* One customizable value in the designer: an editor for it, the layer it comes from and a reset to the layer below. *@
+
+<div class="strata-designer-value">
+    <div class="strata-designer-value-input">
+        @switch (Info.Setting.Type)
+        {
+            case ModelSettingType.Boolean:
+                <MudSwitch T="bool" Value="@(Info.Value is true)" ValueChanged="v => OnChange.InvokeAsync(v)" Color="Color.Primary"
+                           Label="@Info.Setting.Label" Disabled="@Disabled" />
+                break;
+            case ModelSettingType.Integer:
+                <MudNumericField T="int" Value="@(Info.Value as int? ?? 0)" ValueChanged="v => OnChange.InvokeAsync(v)" Label="@Info.Setting.Label"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@Disabled" Error="@(Error is not null)" ErrorText="@Error" />
+                break;
+            case ModelSettingType.Choice:
+            case ModelSettingType.OptionalText when Choices is not null:
+                <MudSelect T="string" Value="@(Info.Value as string ?? "")" ValueChanged="v => OnChange.InvokeAsync(v)" Label="@Info.Setting.Label"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@Disabled" Error="@(Error is not null)" ErrorText="@Error">
+                    @foreach (var (value, text) in Choices ?? [])
+                    {
+                        <MudSelectItem T="string" Value="@value">@text</MudSelectItem>
+                    }
+                </MudSelect>
+                break;
+            default:
+                @if (IsIcon)
+                {
+                    <MudAutocomplete T="string" Value="@(Info.Value as string)" ValueChanged="v => OnChange.InvokeAsync(v)" Label="@Info.Setting.Label"
+                                     SearchFunc="SearchIconsAsync" ToStringFunc="@(svg => svg is null ? "" : DesignerIcons.NameOf(svg) ?? "(custom icon)")"
+                                     MaxItems="60" Clearable="true" ResetValueOnEmptyText="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                     AdornmentIcon="@(Info.Value as string ?? Icons.Material.Outlined.TableRows)" Adornment="Adornment.Start"
+                                     Disabled="@Disabled" Placeholder="Search icons, e.g. people">
+                        <ItemTemplate Context="svg">
+                            <div class="d-flex align-center gap-2"><MudIcon Icon="@svg" Size="Size.Small" />@DesignerIcons.NameOf(svg)</div>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                }
+                else
+                {
+                    <MudTextField T="string" Value="@(Info.Value as string)" ValueChanged="v => OnChange.InvokeAsync(v)" Label="@Info.Setting.Label"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@Disabled" Error="@(Error is not null)" ErrorText="@Error"
+                                  Placeholder="@(Info.Setting.Type == ModelSettingType.OptionalText ? "(none)" : null)" />
+                }
+                break;
+        }
+        @if (Info.DisabledReason is { } reason)
+        {
+            <div class="strata-designer-note"><MudIcon Icon="@Icons.Material.Outlined.Lock" Size="Size.Small" /> @reason</div>
+        }
+        else if (Info.Setting.Help is { } help)
+        {
+            <div class="strata-designer-note">@help</div>
+        }
+    </div>
+    <div class="strata-designer-value-source">
+        <MudTooltip Text="@SourceTooltip">
+            <MudChip T="string" Size="Size.Small" Variant="@(Info.IsSetInTarget ? Variant.Filled : Variant.Outlined)"
+                     Color="@(Info.IsChanged ? Color.Warning : Info.IsSetInTarget ? Color.Primary : Color.Default)">
+                @(Info.IsChanged ? "Unsaved" : Info.Source)
+            </MudChip>
+        </MudTooltip>
+        @if (Info.IsSetInTarget && Info.DisabledReason is null)
+        {
+            <MudTooltip Text="@ResetTooltip">
+                <MudIconButton Icon="@Icons.Material.Outlined.SettingsBackupRestore" Size="Size.Small" OnClick="OnReset"
+                               aria-label="@($"Reset {Info.Setting.Label}")" />
+            </MudTooltip>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ModelValueInfo Info { get; set; } = null!;
+
+    /// <summary>Values and texts for a choice, or for optional text picked from a list (the editor).</summary>
+    [Parameter] public IReadOnlyList<(string Value, string Text)>? Choices { get; set; }
+
+    [Parameter] public bool IsIcon { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback<object?> OnChange { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+
+    private bool Disabled => Info.DisabledReason is not null;
+
+    private string SourceTooltip => Info.IsChanged
+        ? $"Changed here; saving writes it. Before: {Info.Source}."
+        : $"Set by {Info.Source}.";
+
+    private string ResetTooltip => $"Reset to {Format(Info.BelowValue)} from {Info.BelowSource}";
+
+    private string Format(object? value) => value switch
+    {
+        null => "(none)",
+        bool b => b ? "on" : "off",
+        string s when IsIcon => DesignerIcons.NameOf(s) ?? "(custom icon)",
+        string s => $"\"{s}\"",
+        _ => value.ToString() ?? "",
+    };
+
+    private Task<IEnumerable<string>> SearchIconsAsync(string? text, CancellationToken cancellationToken) =>
+        Task.FromResult(DesignerIcons.Search(text));
+}

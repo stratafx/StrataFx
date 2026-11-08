@@ -1,0 +1,15 @@
+@* The application title from the model, for the app bar. Updates when the model designer saves a new title. *@
+@implements IDisposable
+@inject IAppModelProvider Models
+
+<MudText Typo="Typo.h6" Class="@Class">@Models.Current.Title</MudText>
+
+@code {
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized() => Models.Changed += OnModelChanged;
+
+    private void OnModelChanged(AppModel model) => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Models.Changed -= OnModelChanged;
+}

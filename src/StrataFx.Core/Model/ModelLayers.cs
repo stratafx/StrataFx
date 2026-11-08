@@ -21,8 +21,9 @@ public sealed class DelegateModelLayer(string name, Action<AppModel> apply) : IM
 }
 
 /// <summary>
-/// A layer read from JSON. Lets admins or deployments change captions, visibility, order and navigation
+/// A layer read from JSON text. Lets admins or deployments change captions, visibility, order and navigation
 /// without recompiling. Unknown entity or property names are reported as errors so typos are caught early.
+/// Empty text clears optional values (description, group, display format, icon, editor).
 /// </summary>
 /// <example>
 /// {
@@ -69,7 +70,7 @@ public sealed class JsonModelLayer : IModelLayer
             if (e.Caption is not null) entity.Caption = e.Caption;
             if (e.PluralCaption is not null) entity.PluralCaption = e.PluralCaption;
             if (e.NavigationGroup is not null) entity.NavigationGroup = e.NavigationGroup;
-            if (e.Icon is not null) entity.Icon = e.Icon;
+            if (e.Icon is not null) entity.Icon = NullIfEmpty(e.Icon);
             if (e.Order is { } order) entity.Order = order;
             if (e.VisibleInNavigation is { } nav) entity.VisibleInNavigation = nav;
             if (e.LookupProperty is not null)
@@ -82,14 +83,14 @@ public sealed class JsonModelLayer : IModelLayer
                     ?? throw new InvalidOperationException($"Model layer '{Name}': unknown property '{entityId}.{propName}'.");
 
                 if (p.Caption is not null) prop.Caption = p.Caption;
-                if (p.Description is not null) prop.Description = p.Description;
-                if (p.Group is not null) prop.Group = p.Group;
+                if (p.Description is not null) prop.Description = NullIfEmpty(p.Description);
+                if (p.Group is not null) prop.Group = NullIfEmpty(p.Group);
                 if (p.Order is { } o) prop.Order = o;
                 if (p.VisibleInList is { } vl) prop.VisibleInList = vl;
                 if (p.VisibleInDetail is { } vd) prop.VisibleInDetail = vd;
                 if (p.ReadOnly is { } ro) prop.ReadOnly = ro || prop.IsKey;
-                if (p.DisplayFormat is not null) prop.DisplayFormat = p.DisplayFormat;
-                if (p.Editor is not null) prop.EditorName = p.Editor;
+                if (p.DisplayFormat is not null) prop.DisplayFormat = NullIfEmpty(p.DisplayFormat);
+                if (p.Editor is not null) prop.EditorName = NullIfEmpty(p.Editor); // "" goes back to the type's editor
                 if (p.Lines is { } lines) prop.Lines = lines;
                 if (p.CollectionKind is { } collectionKind)
                 {
@@ -101,6 +102,9 @@ public sealed class JsonModelLayer : IModelLayer
             }
         }
     }
+
+    /// <summary>Empty text clears an optional value ("group": "" means no group), so a later layer can undo an earlier one.</summary>
+    private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;
 
     private sealed class ModelDiff
     {
@@ -136,4 +140,121 @@ public sealed class JsonModelLayer : IModelLayer
         [JsonConverter(typeof(JsonStringEnumConverter<CollectionKind>))]
         public CollectionKind? CollectionKind { get; set; }
     }
+}
+
+/// <summary>A model layer failed while the model was built, e.g. a JSON layer names an unknown property.</summary>
+public sealed class ModelLayerException(string layerName, Exception inner)
+    : InvalidOperationException(inner.Message.StartsWith("Model layer ", StringComparison.Ordinal) ? inner.Message : $"Model layer '{layerName}': {inner.Message}", inner)
+{
+    /// <summary>The <see cref="IModelLayer.Name"/> of the layer that failed.</summary>
+    public string LayerName { get; } = layerName;
+}
+
+/// <summary>
+/// A JSON layer backed by a file (model.json), read each time the model is built, so a rebuild picks up changes
+/// written by the model designer or by hand. A missing file is an empty layer.
+/// </summary>
+public sealed class JsonFileModelLayer : IModelLayer
+{
+    private readonly object _gate = new();
+    private string? _text;
+    private JsonModelLayer? _parsed;
+
+    public JsonFileModelLayer(string path, string? name = null)
+    {
+        Path = System.IO.Path.GetFullPath(path);
+        Name = name ?? System.IO.Path.GetFileName(path);
+    }
+
+    public string Name { get; }
+
+    /// <summary>The full path of the file.</summary>
+    public string Path { get; }
+
+    public void Apply(AppModel model)
+    {
+        var text = File.Exists(Path) ? File.ReadAllText(Path) : null;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        JsonModelLayer layer;
+        lock (_gate)
+        {
+            if (_parsed is null || text != _text)
+            {
+                try
+                {
+                    _parsed = new JsonModelLayer(Name, text);
+                }
+                catch (JsonException ex)
+                {
+                    throw new InvalidOperationException($"Model layer '{Name}' is not valid JSON: {ex.Message}", ex);
+                }
+                _text = text;
+            }
+            layer = _parsed;
+        }
+        layer.Apply(model);
+    }
+}
+
+/// <summary>
+/// The database layer: model changes saved by the model designer outside development, stored as JSON (the same
+/// format as model.json) in the <see cref="Settings.IUserSettingsStore"/> under <see cref="Settings.UserSettings.SharedUserName"/>
+/// and <see cref="SettingKey"/>. It is always the last model layer, so it wins over code, modules and JSON files;
+/// each user's own list layouts still apply on top of it. Its content is loaded at startup and replaced on save.
+/// </summary>
+public sealed class DatabaseModelLayer : IModelLayer
+{
+    public const string SettingKey = "strata/model";
+    public const string LayerName = "Database";
+
+    private volatile JsonModelLayer? _layer;
+
+    public string Name => LayerName;
+
+    /// <summary>The JSON last loaded or saved; null when the database has none.</summary>
+    public string? Content { get; private set; }
+
+    /// <summary>Why the stored content was set aside (it doesn't apply to the model), or null.</summary>
+    public string? Problem { get; private set; }
+
+    /// <summary>Replaces the content. Invalid JSON is kept and reported when the model is built.</summary>
+    public void SetContent(string? json)
+    {
+        Content = string.IsNullOrWhiteSpace(json) ? null : json;
+        Problem = null;
+        _layer = null;
+    }
+
+    /// <summary>
+    /// Sets the stored content aside because it doesn't apply (e.g. it names a property that was renamed in code), so
+    /// the app runs without it until the designer saves a new one.
+    /// </summary>
+    public void SetAside(string problem)
+    {
+        Content = null;
+        _layer = null;
+        Problem = problem;
+    }
+
+    public void Apply(AppModel model)
+    {
+        if (Content is not { } json) return;
+        var layer = _layer;
+        if (layer is null)
+        {
+            try
+            {
+                _layer = layer = new JsonModelLayer(Name, json);
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException($"Model layer '{Name}' is not valid JSON: {ex.Message}", ex);
+            }
+        }
+        layer.Apply(model);
+    }
+
+    /// <summary>Reads the saved content from the store.</summary>
+    public async Task LoadAsync(Settings.IUserSettingsStore store, CancellationToken cancellationToken = default) =>
+        SetContent(await store.GetAsync(Settings.UserSettings.SharedUserName, SettingKey, cancellationToken));
 }

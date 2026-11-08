@@ -1,0 +1,9 @@
+@* A link to the model designer for the app bar, shown only to users with the model designer permission. *@
+@inject IPermissionService Permissions
+
+@if (Permissions.HasPermission(StrataPermissions.ModelDesigner))
+{
+    <MudTooltip Text="Model designer">
+        <MudIconButton Icon="@Icons.Material.Outlined.DesignServices" Color="Color.Inherit" Href="@StrataDesignerRoutes.Designer" aria-label="Model designer" />
+    </MudTooltip>
+}

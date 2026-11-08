@@ -6,8 +6,8 @@ contain breaking changes.
 
 ## [0.1.0] - Unreleased
 
-The first public release: StrataFx.Core, StrataFx.EFCore, StrataFx.Blazor, StrataFx.Identity and StrataFx.Templates
-on NuGet, for .NET 10.
+The first public release: StrataFx.Core, StrataFx.EFCore, StrataFx.Blazor, StrataFx.Identity, StrataFx.Designer and
+StrataFx.Templates on NuGet, for .NET 10.
 
 ### Application model
 
@@ -19,6 +19,25 @@ on NuGet, for .NET 10.
   separate records; *New* pre-fills the parent).
 - Model layers: code, modules (`DelegateModelLayer`), JSON (`model.json`, validated at startup) and the user stratum.
 - Modules (`StrataModule`) bundle entities, layers, services, commands, rules, handlers and permissions.
+
+### Model designer
+
+- StrataFx.Designer: an admin-only page (`/strata/designer`, `fx.AddModelDesigner()`, permission
+  `AllowModelDesigner()`) to change entity and property settings in a tree with search, see which layer each value
+  comes from and reset it to the layer below, preview the real list and form with unsaved changes, and review the
+  changed values and the exact text before saving.
+- Saves to model.json in Development, editing only the changed values so comments and formatting stay; elsewhere
+  to a new database model layer (`fx.AddDatabaseModelLayer()`) stored with the user settings and applied after all
+  other layers.
+- The model can be rebuilt while the app runs (`IAppModelProvider` with `Current`, `Rebuild()` and `Changed`). A
+  rebuild swaps in a new model; a broken layer keeps the last good model and reports the error. Injecting
+  `AppModel` still works and gets the current model. JSON layer files are re-read on rebuild.
+- Provenance (`ModelProvenance`): which layer set each customizable value, recorded only when asked for.
+- Named permissions (`IPermissionService.HasPermission`, `RolePermissions.Grant`), never granted by allow-all.
+- `EntityListView` and `EntityDetailView` have a read-only `Preview` mode, and `<StrataAppTitle />` shows the
+  model's title and follows changes.
+- In JSON layers, empty text clears optional values (`"group": ""`, `"editor": ""`).
+- A failing layer is reported as `ModelLayerException` with the layer's name.
 
 ### Behavior
 

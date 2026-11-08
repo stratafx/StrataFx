@@ -31,6 +31,7 @@ Or add the packages to an existing Blazor Server app (.NET 10):
 dotnet add package StrataFx.Blazor
 dotnet add package StrataFx.EFCore
 dotnet add package StrataFx.Identity   # optional: sign-in with ASP.NET Core Identity
+dotnet add package StrataFx.Designer   # optional: the model designer for admins
 ```
 
 **Documentation:** [Getting started](https://github.com/stratafx/StrataFx/blob/main/docs/getting-started.md) ·
@@ -92,6 +93,7 @@ the rest.
 | `StrataFx.EFCore` | `IDataStore` on EF Core: paging, search, sorting, lookups, saves, with permission and validation enforcement. Optional per-user settings store. |
 | `StrataFx.Blazor` | MudBlazor UI: generated list and detail views, property editor registry, navigation menu, command bar, and an `ICurrentUser` read from Blazor's authentication state (works with any authentication). |
 | `StrataFx.Identity` | ASP.NET Core Identity: `fx.UseAspNetCoreIdentity<TUser>()`, sign-in, sign-out and access-denied pages, a user menu for the app bar, and a seeder for roles and users. |
+| `StrataFx.Designer` | The model designer: `fx.AddModelDesigner()`, an admin-only page at `/strata/designer` to change captions, navigation, columns, forms and editors with a live preview, saved to `model.json` in development or to the database, applied without a restart. |
 | `StrataFx.Templates` | The `dotnet new stratafx` project template. |
 | `samples/StrataFx.Sample` (not packaged) | A sales app (customers, products, orders) with a module, commands, a rule and a JSON layer. |
 | `tests/StrataFx.Core.Tests` (not packaged) | Unit tests, including EF Core tests on in-memory SQLite. |
@@ -100,7 +102,10 @@ the rest.
 
 - **Entities**: plain classes with a key. References become lookups; `List<T>` collections are shown in the form,
   either **owned** (`[OwnedCollection]`, edited and saved with the parent) or **related** (separate records).
-- **Model layers**: code, modules, `model.json` and each user's list layouts, each overriding the one below.
+- **Model layers**: code, modules, `model.json`, the database layer and each user's list layouts, each overriding the
+  one below.
+- **Model designer**: admins change the model in the app, see where each value comes from, preview the list and form,
+  and save; everyone gets the new model without a restart.
 - **Modules** bundle entities, layers, commands, rules, handlers and permissions for a feature.
 - **Commands** are business operations shown as buttons; **rules** validate beyond data annotations; **save
   handlers** compute values on every save; **change handlers** react to edits in a form.
@@ -131,6 +136,10 @@ The database (`strata-sample.db`) is created and seeded on first start; delete i
 upgrading, when the schema changed). Try the columns button on a list as `manager`, then sign in as `viewer`: each
 user keeps their own layout.
 
+As `admin`, open the model designer (the icon in the app bar, or `/strata/designer`): rename an entity or hide a
+column, look at the preview, and save. The sample saves to `samples/StrataFx.Sample/model.json` (it runs in
+Development) and the app picks up the change at once. `manager` and `viewer` can't open the designer.
+
 ## Roadmap
 
 - More of the user stratum: saved filters and searches, detail form layouts
@@ -139,6 +148,7 @@ user keeps their own layout.
 - User and role management pages; external sign-in (Entra ID, Google) on the Identity sign-in page
 - ~~ASP.NET Core Identity integration~~ (done: `StrataFx.Identity`)
 - ~~Per-user model layer stored in the database~~ (done: user list layouts)
+- ~~A visual model designer~~ (done: `StrataFx.Designer`)
 
 ## Contributing
 

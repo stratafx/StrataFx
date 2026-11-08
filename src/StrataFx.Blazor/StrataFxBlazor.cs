@@ -41,6 +41,9 @@ public sealed class PropertyEditorRegistry
         return this;
     }
 
+    /// <summary>The names of the registered named editors, sorted.</summary>
+    public IReadOnlyList<string> EditorNames => _byName.Keys.Order(StringComparer.OrdinalIgnoreCase).ToList();
+
     public Type Resolve(PropertyModel property)
     {
         if (property.EditorName is { } name)
@@ -48,6 +51,12 @@ public sealed class PropertyEditorRegistry
                 ?? throw new InvalidOperationException($"No editor named '{name}' is registered (used by {property.Owner.ClrType.Name}.{property.Name}).");
         return _byKind.GetValueOrDefault(property.EditorKind) ?? typeof(TextEditor);
     }
+}
+
+/// <summary>The cascading value that marks views inside a model designer preview.</summary>
+public static class StrataPreview
+{
+    public const string CascadingName = "StrataPreview";
 }
 
 public static class StrataRoutes
